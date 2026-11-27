@@ -6,17 +6,20 @@ import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.text.LiteralText;
 
 /**
- * 轻量菜单：
- *  - 圆角保留（圆弧 insets 在 init 时预计算一次，render 直接用数组）
- *  - 无缓动、无渐变、无多层阴影
- *  - 每帧 fill 次数 ≈ 行数×3
+ * 手机友好菜单 v1.3
+ *  - 手指上下拖拽滚动（mouseDragged）
+ *  - 底部 ◀ ▶ 翻页按钮（每按一次滚一屏）
+ *  - 保留滚轮（桌面端可用）
+ *  - 扁平圆角，无动画
  */
 public class CheatScreen extends Screen {
 
     private static final int PANEL_W = 300;
     private static final int PAD = 8;
-    private static final int ROW_H = 18;
+    private static final int ROW_H = 20;
     private static final int RADIUS = 6;
+    private static final int HEAD_H = 26;
+    private static final int FOOT_H = 30;
 
     private static final int C_BG       = 0xEE0E1218;
     private static final int C_HEAD     = 0xFF17202E;
@@ -30,15 +33,20 @@ public class CheatScreen extends Screen {
     private static final int C_ROWHOT   = 0x336FC8FF;
     private static final int C_ROW      = 0x14FFFFFF;
     private static final int C_DIM_ACCENT = 0x3F6FC8FF;
+    private static final int C_BTN      = 0x33FFFFFF;
+    private static final int C_BTN_HOT  = 0x556FC8FF;
 
     private int panelX, panelY, panelH;
     private int viewTop, viewBottom;
-    private int scrollRow = 0;
+    private int scroll = 0;          // 像素滚动
     private int hoveredRow = -1;
 
-    // 预计算的圆角内缩量（半径 RADIUS 条）
-    private static final int[] INSET = new int[RADIUS];
+    // 拖拽状态
+    private boolean dragging = false;
+    private double dragStartY = 0;
+    private int dragStartScroll = 0;
 
+    private static final int[] INSET = new int[RADIUS];
     static {
         for (int i = 0; i < RADIUS; i++) {
             double dy = RADIUS - i - 0.5;
@@ -54,10 +62,11 @@ public class CheatScreen extends Screen {
     @Override
     protected void init() {
         panelX = this.width / 2 - PANEL_W / 2;
-        panelY = Math.max(8, this.height / 10);
+        panelY = Math.max(8, this.height / 12);
         panelH = this.height - panelY * 2;
-        viewTop = panelY + 26;
-        viewBottom = panelY + panelH - 8;
+        viewTop = panelY + HEAD_H;
+        viewBottom = panelY + panelH - FOOT_H;
+        scroll = 0;
     }
 
     // ---------- 圆角 ----------
@@ -67,7 +76,7 @@ public class CheatScreen extends Screen {
         int r = Math.min(RADIUS, Math.min(w / 2, h / 2));
         fill(ms, x, y + r, x + w, y + h - r, color);
         for (int i = 0; i < r; i++) {
-            int ins = (i < INSET.length) ? INSET[i] : 0;
+            int ins = i < INSET.length ? INSET[i] : 0;
             fill(ms, x + ins, y + i, x + w - ins, y + i + 1, color);
             fill(ms, x + ins, y + h - 1 - i, x + w - ins, y + h - i, color);
         }
@@ -80,7 +89,7 @@ public class CheatScreen extends Screen {
         fill(ms, x, y + r, x + 1, y + h - r, color);
         fill(ms, x + w - 1, y + r, x + w, y + h - r, color);
         for (int i = 0; i < r; i++) {
-            int ins = (i < INSET.length) ? INSET[i] : 0;
+            int ins = i < INSET.length ? INSET[i] : 0;
             fill(ms, x + ins, y + i, x + ins + 1, y + i + 1, color);
             fill(ms, x + w - 1 - ins, y + i, x + w - ins, y + i + 1, color);
             fill(ms, x + ins, y + h - 1 - i, x + ins + 1, y + h - i, color);
@@ -102,7 +111,7 @@ public class CheatScreen extends Screen {
     private static final int SEC_H = 18;
 
     private int rowY(int i) {
-        int base = viewTop - scrollRow * ROW_H;
+        int base = viewTop - scroll;
         if (i < Cheats.TOGGLES.length) return base + i * ROW_H;
         return base + Cheats.TOGGLES.length * ROW_H + SEC_H + (i - Cheats.TOGGLES.length) * ROW_H;
     }
@@ -111,11 +120,12 @@ public class CheatScreen extends Screen {
         return Cheats.TOGGLES.length + Cheats.ACTIONS.length;
     }
 
+    private int contentHeight() {
+        return Cheats.TOGGLES.length * ROW_H + SEC_H + Cheats.ACTIONS.length * ROW_H;
+    }
+
     private int maxScroll() {
-        int content = Cheats.TOGGLES.length * ROW_H + SEC_H + Cheats.ACTIONS.length * ROW_H;
-        int viewH = viewBottom - viewTop;
-        int maxByPixel = Math.max(0, (content - viewH + ROW_H - 1) / ROW_H);
-        return Math.min(maxByPixel, totalRows());
+        return Math.max(0, contentHeight() - (viewBottom - viewTop));
     }
 
     // ---------- 渲染 ----------
@@ -123,10 +133,9 @@ public class CheatScreen extends Screen {
     @Override
     public void render(MatrixStack ms, int mouseX, int mouseY, float delta) {
         renderBackground(ms);
-
         roundRect(ms, panelX, panelY, PANEL_W, panelH, C_BG);
 
-        // 行（先画，再被标题/底栏盖住，天然裁剪）
+        // 行
         hoveredRow = -1;
         for (int i = 0; i < totalRows(); i++) {
             int y = rowY(i);
@@ -134,49 +143,58 @@ public class CheatScreen extends Screen {
 
             int rx = panelX + PAD;
             int rw = PANEL_W - PAD * 2;
-            boolean hot = mouseX >= rx && mouseX <= rx + rw
-                    && mouseY >= Math.max(y, viewTop) && mouseY < Math.min(y + ROW_H, viewBottom);
-            if (hot) {
-                hoveredRow = i;
-                roundRect(ms, rx, y, rw, ROW_H - 2, C_ROWHOT);
-            } else {
-                roundRect(ms, rx, y, rw, ROW_H - 2, C_ROW);
-            }
+            boolean inside = mouseY >= Math.max(y, viewTop) && mouseY < Math.min(y + ROW_H, viewBottom);
+            boolean hot = inside && !dragging && mouseX >= rx && mouseX <= rx + rw;
+            if (hot) hoveredRow = i;
+
+            roundRect(ms, rx, y, rw, ROW_H - 2, hot ? C_ROWHOT : C_ROW);
 
             if (i < Cheats.TOGGLES.length) {
                 Cheats.Toggle t = Cheats.TOGGLES[i];
-                txt(ms, t.name, rx + 6, y + 4, t.on ? C_TXT : C_TXT_DIM);
-                // 开关：小圆角块 + 状态色
+                txt(ms, t.name, rx + 6, y + 5, t.on ? C_TXT : C_TXT_DIM);
                 int swX = rx + rw - 26;
-                roundRect(ms, swX, y + 4, 20, 10, t.on ? C_ON : C_OFF);
-                // 指示点
-                fill(ms, t.on ? swX + 12 : swX + 2, y + 6, t.on ? swX + 18 : swX + 8, y + 12, 0xFFFFFFFF);
+                roundRect(ms, swX, y + 5, 20, 10, t.on ? C_ON : C_OFF);
+                fill(ms, t.on ? swX + 12 : swX + 2, y + 7, t.on ? swX + 18 : swX + 8, y + 13, 0xFFFFFFFF);
             } else {
                 Cheats.Action a = Cheats.ACTIONS[i - Cheats.TOGGLES.length];
-                txt(ms, "\u00bb " + a.name, rx + 6, y + 4, C_TXT);
+                txt(ms, "\u00bb " + a.name, rx + 6, y + 5, C_TXT);
             }
         }
 
         // 分区标题
-        int secY = viewTop - scrollRow * ROW_H + Cheats.TOGGLES.length * ROW_H;
+        int secY = viewTop - scroll + Cheats.TOGGLES.length * ROW_H;
         if (secY >= viewTop - SEC_H && secY < viewBottom) {
             txtCenter(ms, "-- 一次性操作 --", panelX + PANEL_W / 2, secY + 4, C_SECTION);
         }
 
-        // 标题栏（盖住上方溢出）
-        roundRect(ms, panelX, panelY, PANEL_W, 26 + RADIUS, C_HEAD);
-        fill(ms, panelX + 1, panelY + 25, panelX + PANEL_W - 1, panelY + 26, C_DIM_ACCENT);
+        // 标题栏
+        roundRect(ms, panelX, panelY, PANEL_W, HEAD_H + RADIUS, C_HEAD);
+        fill(ms, panelX + 1, panelY + HEAD_H - 1, panelX + PANEL_W - 1, panelY + HEAD_H, C_DIM_ACCENT);
         txtCenter(ms, "GHOST MENU", panelX + PANEL_W / 2, panelY + 8, C_ACCENT);
-        txt(ms, "v1.2", panelX + PANEL_W - PAD - 18, panelY + 16, C_TXT_DIM);
+        txt(ms, "v1.3", panelX + PANEL_W - PAD - 18, panelY + 16, C_TXT_DIM);
 
-        // 底栏（盖住下方溢出）
-        int footY = panelY + panelH - 18;
-        roundRect(ms, panelX, footY - RADIUS, PANEL_W, 18 + RADIUS, C_BG);
+        // 底栏：翻页按钮 + 状态
+        int footY = panelY + panelH - FOOT_H;
+        roundRect(ms, panelX, footY - RADIUS, PANEL_W, FOOT_H + RADIUS, C_BG);
         fill(ms, panelX + 1, footY - RADIUS, panelX + PANEL_W - 1, footY - RADIUS + 1, C_DIM_ACCENT);
-        txt(ms, "聊天输入 \u56cd 开菜单 · 滚轮翻页",
-                panelX + PAD, footY - 9, C_TXT_DIM);
 
-        // 边框
+        // 上翻按钮
+        int btnW = 44, btnH = 18;
+        int upX = panelX + PAD, upY = footY + 6;
+        boolean upHot = mouseX >= upX && mouseX <= upX + btnW && mouseY >= upY && mouseY <= upY + btnH;
+        roundRect(ms, upX, upY, btnW, btnH, upHot ? C_BTN_HOT : C_BTN);
+        txtCenter(ms, "\u25b2 上翻", upX + btnW / 2, upY + 5, C_TXT);
+
+        // 下翻按钮
+        int dnX = panelX + PANEL_W - PAD - btnW, dnY = upY;
+        boolean dnHot = mouseX >= dnX && mouseX <= dnX + btnW && mouseY >= dnY && mouseY <= dnY + btnH;
+        roundRect(ms, dnX, dnY, btnW, btnH, dnHot ? C_BTN_HOT : C_BTN);
+        txtCenter(ms, "\u25bc 下翻", dnX + btnW / 2, dnY + 5, C_TXT);
+
+        // 中间提示
+        int pct = maxScroll() == 0 ? 100 : (int) (scroll * 100f / maxScroll());
+        txtCenter(ms, pct + "%  手指拖动可滚", panelX + PANEL_W / 2, upY + 5, C_TXT_DIM);
+
         roundOutline(ms, panelX, panelY, PANEL_W, panelH, C_BORDER);
 
         super.render(ms, mouseX, mouseY, delta);
@@ -184,9 +202,46 @@ public class CheatScreen extends Screen {
 
     // ---------- 交互 ----------
 
+    private boolean inPanel(double mx, double my) {
+        return mx >= panelX && mx <= panelX + PANEL_W && my >= panelY && my <= panelY + panelH;
+    }
+
+    private boolean inView(double my) {
+        return my >= viewTop && my < viewBottom;
+    }
+
+    /** 上翻/下翻按钮区域检测 */
+    private int buttonAt(double mx, double my) {
+        int btnW = 44, btnH = 18;
+        int footY = panelY + panelH - FOOT_H;
+        int upX = panelX + PAD, upY = footY + 6;
+        if (mx >= upX && mx <= upX + btnW && my >= upY && my <= upY + btnH) return -1; // 上翻
+        int dnX = panelX + PANEL_W - PAD - btnW;
+        if (mx >= dnX && mx <= dnX + btnW && my >= upY && my <= upY + btnH) return 1;   // 下翻
+        return 0;
+    }
+
     @Override
     public boolean mouseClicked(double mx, double my, int button) {
-        if (hoveredRow >= 0) {
+        if (!inPanel(mx, my)) {
+            this.onClose();
+            return true;
+        }
+
+        // 翻页按钮优先
+        int btn = buttonAt(mx, my);
+        int pageH = viewBottom - viewTop - ROW_H;
+        if (btn == -1) {
+            scroll = Math.max(0, scroll - pageH);
+            return true;
+        }
+        if (btn == 1) {
+            scroll = Math.min(maxScroll(), scroll + pageH);
+            return true;
+        }
+
+        // 行点击
+        if (inView(my) && hoveredRow >= 0) {
             if (hoveredRow < Cheats.TOGGLES.length) {
                 Cheats.Toggle t = Cheats.TOGGLES[hoveredRow];
                 t.on = !t.on;
@@ -195,19 +250,35 @@ public class CheatScreen extends Screen {
             }
             return true;
         }
-        // 点面板外关掉
-        if (mx < panelX || mx > panelX + PANEL_W || my < panelY || my > panelY + panelH) {
-            this.onClose();
+
+        // 空白区按下：准备拖拽
+        if (inView(my)) {
+            dragging = true;
+            dragStartY = my;
+            dragStartScroll = scroll;
+        }
+        return true;
+    }
+
+    @Override
+    public boolean mouseDragged(double mx, double my, int button, double dx, double dy) {
+        if (dragging) {
+            int delta = (int) (dragStartY - my);
+            scroll = Math.max(0, Math.min(maxScroll(), dragStartScroll + delta));
             return true;
         }
-        return super.mouseClicked(mx, my, button);
+        return super.mouseDragged(mx, my, button, dx, dy);
+    }
+
+    @Override
+    public boolean mouseReleased(double mx, double my, int button) {
+        dragging = false;
+        return super.mouseReleased(mx, my, button);
     }
 
     @Override
     public boolean mouseScrolled(double mx, double my, double amount) {
-        scrollRow -= (int) Math.signum(amount);
-        if (scrollRow < 0) scrollRow = 0;
-        if (scrollRow > maxScroll()) scrollRow = maxScroll();
+        scroll = Math.max(0, Math.min(maxScroll(), scroll - (int) (amount * 24)));
         return true;
     }
 
