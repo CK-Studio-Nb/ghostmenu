@@ -140,16 +140,21 @@ public class Cheats {
 
         PlayerAbilities ab = mc.player.abilities;
 
-        // ---------- 无摔落：每 tick 持续清零（服务端按包计算伤害） ----------
-        if (NO_FALL.on) {
+        // ---------- 无摔落 ----------
+        // 关键：飞行状态下绝对不能发 onGround=true 的假包！
+        // 否则服务端看到"站在地上但坐标在下降"，会判定异常位移 → 反复拉回 → 卡方块窒息。
+        boolean flying = ab.flying || ab.allowFlying;
+        if (NO_FALL.on && !flying) {
             if (mc.player.fallDistance > 0f) {
                 mc.player.fallDistance = 0f;
+                if (mc.getNetworkHandler() != null) {
+                    mc.getNetworkHandler().sendPacket(new PlayerMoveC2SPacket.PositionOnly(
+                            mc.player.getX(), mc.player.getY(), mc.player.getZ(), true));
+                }
             }
-            // 每 tick 都发一次 onGround=true，覆盖原版自动发的移动包
-            if (mc.getNetworkHandler() != null) {
-                mc.getNetworkHandler().sendPacket(new PlayerMoveC2SPacket.PositionOnly(
-                        mc.player.getX(), mc.player.getY(), mc.player.getZ(), true));
-            }
+        } else if (NO_FALL.on && flying) {
+            // 飞行时只清本地计数，不发包
+            mc.player.fallDistance = 0f;
         }
 
         if (FLY.on) {
@@ -212,8 +217,8 @@ public class Cheats {
         // 杀戮光环：4.5 格内最近的活体，不限类型，每 tick 打一个
         if (KILL_AURA.on) killAuraOnce();
 
-        // 激光攻击：按住右键持续打准星目标（可配合激光射线视觉）
-        if (LASER_ATTACK.on && mc.mouse.wasRightButtonClicked()) {
+        // 激光攻击：按住右键持续打（用 keyUse.isPressed 才能"按住"，wasRightButtonClicked 只在按下那一 tick 为 true）
+        if (LASER_ATTACK.on && mc.options.keyUse.isPressed()) {
             laserHit();
         }
 
@@ -366,7 +371,7 @@ public class Cheats {
         Vec3d dir = mc.player.getRotationVec(1.0f).normalize();
 
         Entity best = null;
-        double bestT = 64.0;
+        double bestT = 5.5;    // 服务端硬校验：攻击距离超过约 6 格会被拒绝，取 5.5 稳妥
 
         for (Entity e : mc.world.getEntities()) {
             if (e == mc.player) continue;
@@ -375,12 +380,12 @@ public class Cheats {
 
             Vec3d center = e.getBoundingBox().getCenter();
             Vec3d to = center.subtract(eye);
-            double t = to.dotProduct(dir);          // 投影距离
-            if (t < 0 || t > 64.0) continue;
+            double t = to.dotProduct(dir);          // 沿视线的投影距离
+            if (t < 0 || t > 5.5) continue;
 
             Vec3d closest = eye.add(dir.multiply(t));
             double distToAxis = closest.distanceTo(center);
-            double radius = (e.getBoundingBox().maxX - e.getBoundingBox().minX) * 0.55 + 0.6;
+            double radius = (e.getBoundingBox().maxX - e.getBoundingBox().minX) * 0.55 + 1.2;
 
             if (distToAxis <= radius && t < bestT) {
                 bestT = t;
