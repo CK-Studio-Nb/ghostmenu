@@ -6,6 +6,7 @@
   "description": "Client cheat menu for 1.16.5",
   "authors": ["ghost"],
   "environment": "client",
+  "mixins": ["ghostmenu.mixins.json"],
   "entrypoints": {
     "client": ["com.ghost.cheatmenu.GhostMenu"]
   },
