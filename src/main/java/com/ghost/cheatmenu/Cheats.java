@@ -49,7 +49,8 @@ public class Cheats {
     public static final Toggle XRAY = new Toggle("真透视X-Ray");
     public static final Toggle ESP_PLAYER = new Toggle("透视-玩家");
     public static final Toggle ESP_MOB = new Toggle("透视-怪物");
-    public static final Toggle LASER = new Toggle("激光射线");
+    public static final Toggle LASER = new Toggle("激光射线(视觉)");
+    public static final Toggle LASER_ATTACK = new Toggle("激光攻击(按住右键)");
 
     // ===== 攻击性 =====
     public static final Toggle KILL_AURA = new Toggle("杀戮光环");
@@ -62,12 +63,11 @@ public class Cheats {
 
     public static final Toggle[] TOGGLES = {
             SPEED, FLY, NO_FALL, NO_CLIP, SPIDER, BUNNY_HOP, AUTO_RESPAWN, FULL_BRIGHT,
-            ESP_PLAYER, ESP_MOB, LASER, XRAY, KILL_AURA, REACH,
+            ESP_PLAYER, ESP_MOB, LASER, LASER_ATTACK, XRAY, KILL_AURA,
             SPIN, JITTER, CHAT_SPAM
     };
 
     public static final Action[] ACTIONS = {
-            new Action("激光打一下准星目标", Cheats::laserHit),
             new Action("杀戮光环 全清一次", Cheats::killAuraOnce),
             new Action("刷 10 只僵尸", () -> spawnMobs("zombie", 10)),
             new Action("刷 5 只苦力怕", () -> spawnMobs("creeper", 5)),
@@ -98,9 +98,22 @@ public class Cheats {
     private static volatile boolean pendingOpenMenu = false;
     private static int pendingDelay = 0;
 
+    /** 追踪 player 实例：死亡重生后是新对象，必须重置所有已应用标记 */
+    private static Object lastPlayerRef = null;
+
     public static void requestOpenMenu() {
         pendingOpenMenu = true;
         pendingDelay = 3;   // 等几 tick，让 ChatScreen 先把界面关掉
+    }
+
+    /** 死亡/重生/换维度时调用：把"已应用"状态全部清空，让开关能重新生效 */
+    private static void resetAppliedState() {
+        flyApplied = false;
+        speedApplied = false;
+        noclipApplied = false;
+        gammaSaved = false;
+        savedGamma = 1.0;
+        spamTimer = 0;
     }
 
     // ================= tick =================
@@ -119,7 +132,25 @@ public class Cheats {
 
         if (mc.player == null) return;
 
+        // 检测 player 实例变化（死亡重生 / 换维度）→ 清空已应用状态
+        if (lastPlayerRef != mc.player) {
+            lastPlayerRef = mc.player;
+            resetAppliedState();
+        }
+
         PlayerAbilities ab = mc.player.abilities;
+
+        // ---------- 无摔落：每 tick 持续清零（服务端按包计算伤害） ----------
+        if (NO_FALL.on) {
+            if (mc.player.fallDistance > 0f) {
+                mc.player.fallDistance = 0f;
+            }
+            // 每 tick 都发一次 onGround=true，覆盖原版自动发的移动包
+            if (mc.getNetworkHandler() != null) {
+                mc.getNetworkHandler().sendPacket(new PlayerMoveC2SPacket.PositionOnly(
+                        mc.player.getX(), mc.player.getY(), mc.player.getZ(), true));
+            }
+        }
 
         if (FLY.on) {
             // 只在第一次开启时授予飞行权限，之后不再每 tick 强制 flying=true，
@@ -146,17 +177,6 @@ public class Cheats {
             ab.setWalkSpeed(0.1f);
             mc.player.sendAbilitiesUpdate();
             speedApplied = false;
-        }
-
-        // 无摔落：无论多高，只要 fallDistance 开始累积就立刻清零并告知服务端
-        if (NO_FALL.on) {
-            if (mc.player.fallDistance > 0.05f) {
-                mc.player.fallDistance = 0f;
-                if (mc.getNetworkHandler() != null) {
-                    mc.getNetworkHandler().sendPacket(new PlayerMoveC2SPacket.PositionOnly(
-                            mc.player.getX(), mc.player.getY(), mc.player.getZ(), true));
-                }
-            }
         }
 
         if (FULL_BRIGHT.on) {
@@ -189,8 +209,13 @@ public class Cheats {
             mc.player.requestRespawn();
         }
 
+        // 杀戮光环：4.5 格内最近的活体，不限类型，每 tick 打一个
         if (KILL_AURA.on) killAuraOnce();
-        // REACH：靠 attackEntity 直接发，不受原版 3 格限制（服务端仍有自己的校验）
+
+        // 激光攻击：按住右键持续打准星目标（可配合激光射线视觉）
+        if (LASER_ATTACK.on && mc.mouse.wasRightButtonClicked()) {
+            laserHit();
+        }
 
         if (SPIN.on) mc.player.yaw += 18f;
 
@@ -306,27 +331,72 @@ public class Cheats {
     public static void killAuraOnce() {
         MinecraftClient mc = MinecraftClient.getInstance();
         if (mc.player == null || mc.world == null || mc.interactionManager == null) return;
+
+        Entity best = null;
+        double bestDist = 4.5 * 4.5;
+
         for (Entity e : mc.world.getEntities()) {
             if (e == mc.player) continue;
             if (!(e instanceof LivingEntity)) continue;
             if (!e.isAlive()) continue;
-            if (!(e instanceof HostileEntity)) continue;
-            if (e.squaredDistanceTo(mc.player) > 3.2 * 3.2) continue;
-            mc.interactionManager.attackEntity(mc.player, e);
+            double d = e.squaredDistanceTo(mc.player);
+            if (d < bestDist) {
+                bestDist = d;
+                best = e;
+            }
+        }
+
+        if (best != null) {
+            mc.interactionManager.attackEntity(mc.player, best);
             mc.player.swingHand(net.minecraft.util.Hand.MAIN_HAND);
-            break; // 每 tick 只打一个，避免被踢
         }
     }
 
+    /**
+     * 激光攻击：从眼睛沿视线方向做自己算的射线（最远 64 格），
+     * 命中最近的活体就打它。不依赖 crosshairTarget（那个只有 4.5 格）。
+     */
     public static void laserHit() {
         MinecraftClient mc = MinecraftClient.getInstance();
-        if (mc.player == null || mc.interactionManager == null || mc.crosshairTarget == null) return;
-        if (mc.crosshairTarget instanceof net.minecraft.util.hit.EntityHitResult) {
-            Entity target = ((net.minecraft.util.hit.EntityHitResult) mc.crosshairTarget).getEntity();
-            mc.interactionManager.attackEntity(mc.player, target);
+        if (mc.player == null || mc.world == null || mc.interactionManager == null) return;
+
+        Vec3d eye = new Vec3d(mc.player.getX(),
+                mc.player.getY() + mc.player.getStandingEyeHeight(),
+                mc.player.getZ());
+        Vec3d dir = mc.player.getRotationVec(1.0f).normalize();
+
+        Entity best = null;
+        double bestT = 64.0;
+
+        for (Entity e : mc.world.getEntities()) {
+            if (e == mc.player) continue;
+            if (!(e instanceof LivingEntity)) continue;
+            if (!e.isAlive()) continue;
+
+            Vec3d center = e.getBoundingBox().getCenter();
+            Vec3d to = center.subtract(eye);
+            double t = to.dotProduct(dir);          // 投影距离
+            if (t < 0 || t > 64.0) continue;
+
+            Vec3d closest = eye.add(dir.multiply(t));
+            double distToAxis = closest.distanceTo(center);
+            double radius = (e.getBoundingBox().maxX - e.getBoundingBox().minX) * 0.55 + 0.6;
+
+            if (distToAxis <= radius && t < bestT) {
+                bestT = t;
+                best = e;
+            }
+        }
+
+        if (best != null) {
+            mc.interactionManager.attackEntity(mc.player, best);
             mc.player.swingHand(net.minecraft.util.Hand.MAIN_HAND);
+            lastLaserTarget = best;
         }
     }
+
+    /** 供渲染用：激光打中的目标 */
+    public static Entity lastLaserTarget = null;
 
     // ================= 刷东西（需要 OP/创造） =================
 
