@@ -54,6 +54,7 @@ public class Cheats {
 
     // ===== 攻击性 =====
     public static final Toggle KILL_AURA = new Toggle("杀戮光环");
+    public static final Toggle INFINITE_CHARGE = new Toggle("无尽蓄力(满攻速)");
     public static final Toggle REACH = new Toggle("长手(攻击距离)");
 
     // ===== 抽象/搞事 =====
@@ -63,7 +64,7 @@ public class Cheats {
 
     public static final Toggle[] TOGGLES = {
             SPEED, FLY, NO_FALL, NO_CLIP, SPIDER, BUNNY_HOP, AUTO_RESPAWN, FULL_BRIGHT,
-            ESP_PLAYER, ESP_MOB, LASER, LASER_ATTACK, XRAY, KILL_AURA,
+            ESP_PLAYER, ESP_MOB, LASER, LASER_ATTACK, XRAY, KILL_AURA, INFINITE_CHARGE,
             SPIN, JITTER, CHAT_SPAM
     };
 
