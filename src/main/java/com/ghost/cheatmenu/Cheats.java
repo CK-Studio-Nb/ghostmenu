@@ -122,11 +122,14 @@ public class Cheats {
         PlayerAbilities ab = mc.player.abilities;
 
         if (FLY.on) {
-            ab.allowFlying = true;
-            ab.flying = true;
-            ab.setFlySpeed(0.5f);
-            mc.player.sendAbilitiesUpdate();
-            flyApplied = true;
+            // 只在第一次开启时授予飞行权限，之后不再每 tick 强制 flying=true，
+            // 否则按住蹲下键会被强行拉起，反而一直往下掉。
+            if (!flyApplied) {
+                ab.allowFlying = true;
+                ab.setFlySpeed(0.5f);
+                mc.player.sendAbilitiesUpdate();
+                flyApplied = true;
+            }
         } else if (flyApplied) {
             ab.allowFlying = false;
             ab.flying = false;
@@ -145,10 +148,15 @@ public class Cheats {
             speedApplied = false;
         }
 
-        if (NO_FALL.on && mc.player.fallDistance > 1.5f && mc.getNetworkHandler() != null) {
-            mc.getNetworkHandler().sendPacket(new PlayerMoveC2SPacket.PositionOnly(
-                    mc.player.getX(), mc.player.getY(), mc.player.getZ(), true));
-            mc.player.fallDistance = 0f;
+        // 无摔落：无论多高，只要 fallDistance 开始累积就立刻清零并告知服务端
+        if (NO_FALL.on) {
+            if (mc.player.fallDistance > 0.05f) {
+                mc.player.fallDistance = 0f;
+                if (mc.getNetworkHandler() != null) {
+                    mc.getNetworkHandler().sendPacket(new PlayerMoveC2SPacket.PositionOnly(
+                            mc.player.getX(), mc.player.getY(), mc.player.getZ(), true));
+                }
+            }
         }
 
         if (FULL_BRIGHT.on) {
