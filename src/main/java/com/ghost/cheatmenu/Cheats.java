@@ -94,9 +94,29 @@ public class Cheats {
     private static double savedGamma = 1.0;
     private static boolean noclipApplied = false;
 
+    /** 「囍」触发的待打开标记：由 tick 在下一帧打开菜单 */
+    private static volatile boolean pendingOpenMenu = false;
+    private static int pendingDelay = 0;
+
+    public static void requestOpenMenu() {
+        pendingOpenMenu = true;
+        pendingDelay = 3;   // 等几 tick，让 ChatScreen 先把界面关掉
+    }
+
     // ================= tick =================
 
     public static void tick(MinecraftClient mc) {
+        // ===== 处理「囍」的待打开菜单（必须在 player==null 提前返回之前）=====
+        if (pendingOpenMenu) {
+            if (pendingDelay > 0) {
+                pendingDelay--;
+            } else if (mc.currentScreen == null) {
+                // 聊天界面已经关掉，这时开菜单才不会被顶掉
+                pendingOpenMenu = false;
+                mc.openScreen(new com.ghost.cheatmenu.gui.CheatScreen());
+            }
+        }
+
         if (mc.player == null) return;
 
         PlayerAbilities ab = mc.player.abilities;
