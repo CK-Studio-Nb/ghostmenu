@@ -1,0 +1,31 @@
+package com.ghost.cheatmenu;
+
+import com.ghost.cheatmenu.gui.CheatScreen;
+import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+import net.minecraft.client.options.KeyBinding;
+import net.minecraft.client.util.InputUtil;
+import org.lwjgl.glfw.GLFW;
+
+public class GhostMenu implements ClientModInitializer {
+
+    public static KeyBinding openKey;
+
+    @Override
+    public void onInitializeClient() {
+        openKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+                "key.ghostmenu.open",
+                InputUtil.Type.KEYSYM,
+                GLFW.GLFW_KEY_RIGHT_SHIFT,
+                "category.ghostmenu"
+        ));
+
+        ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            while (openKey.wasPressed()) {
+                client.openScreen(new CheatScreen());
+            }
+            Cheats.tick(client);
+        });
+    }
+}
