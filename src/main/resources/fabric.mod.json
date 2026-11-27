@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "ghostmenu",
+  "version": "1.0.0",
+  "name": "Ghost Menu",
+  "description": "Client cheat menu for 1.16.5",
+  "authors": ["ghost"],
+  "environment": "client",
+  "entrypoints": {
+    "client": ["com.ghost.cheatmenu.GhostMenu"]
+  },
+  "depends": {
+    "fabricloader": ">=0.11.0",
+    "minecraft": "1.16.x",
+    "java": ">=8",
+    "fabric": "*"
+  }
+}
