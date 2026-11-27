@@ -29,6 +29,7 @@ public class CheatScreen extends Screen {
     private static final int C_SECTION  = 0xFFF2C45E;
     private static final int C_ROWHOT   = 0x336FC8FF;
     private static final int C_ROW      = 0x14FFFFFF;
+    private static final int C_DIM_ACCENT = 0x3F6FC8FF;
 
     private int panelX, panelY, panelH;
     private int viewTop, viewBottom;
@@ -164,14 +165,14 @@ public class CheatScreen extends Screen {
 
         // 标题栏（盖住上方溢出）
         roundRect(ms, panelX, panelY, PANEL_W, 26 + RADIUS, C_HEAD);
-        fill(ms, panelX + 1, panelY + 25, panelX + PANEL_W - 1, panelY + 26, C_ACCENT & 0xFF3FFFFFFF);
+        fill(ms, panelX + 1, panelY + 25, panelX + PANEL_W - 1, panelY + 26, C_DIM_ACCENT);
         txtCenter(ms, "GHOST MENU", panelX + PANEL_W / 2, panelY + 8, C_ACCENT);
         txt(ms, "v1.1", panelX + PANEL_W - PAD - 18, panelY + 16, C_TXT_DIM);
 
         // 底栏（盖住下方溢出）
         int footY = panelY + panelH - 18;
         roundRect(ms, panelX, footY - RADIUS, PANEL_W, 18 + RADIUS, C_BG);
-        fill(ms, panelX + 1, footY - RADIUS, panelX + PANEL_W - 1, footY - RADIUS + 1, C_ACCENT & 0xFF3FFFFFFF);
+        fill(ms, panelX + 1, footY - RADIUS, panelX + PANEL_W - 1, footY - RADIUS + 1, C_DIM_ACCENT);
         txt(ms, "点行切换 · 滚轮翻页 · " + (scrollRow + 1) + "/" + (maxScroll() + 1),
                 panelX + PAD, footY - 9, C_TXT_DIM);
 
