@@ -6,7 +6,10 @@
   "client": [
     "ChatTriggerMixin",
     "XrayMixin",
-    "FullChargeMixin"
+    "FullChargeMixin",
+    "RecipeUnlockMixin",
+    "RecipeFreeMixin",
+    "MultiplayerUnlockMixin"
   ],
   "injectors": {
     "defaultRequire": 1
