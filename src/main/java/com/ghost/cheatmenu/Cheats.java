@@ -25,7 +25,7 @@ public class Cheats {
 
     public static final Toggle FLY = new Toggle("飞行");
     public static final Toggle SPEED = new Toggle("加速");
-    public static final Toggle NO_FALL = new Toggle("无摔落伤害");
+    public static final Toggle NO_FALL = new Toggle("无摔落");
     public static final Toggle FULL_BRIGHT = new Toggle("夜视");
     public static final Toggle NO_CLIP = new Toggle("穿墙");
     public static final Toggle SPIDER = new Toggle("蜘蛛爬墙");
@@ -45,27 +45,20 @@ public class Cheats {
             new Action("卡墙上升 +5", () -> vclip(5)),
             new Action("卡墙下降 -5", () -> vclip(-5)),
             new Action("发坐标", Cheats::sendCoords),
-            new Action("清屏聊天", () -> {
-                if (MinecraftClient.getInstance().inGameHud != null)
-                    MinecraftClient.getInstance().inGameHud.getChatHud().clear(true);
-            }),
-            new Action("视角归零", () -> {
-                if (MinecraftClient.getInstance().player != null) {
-                    MinecraftClient.getInstance().player.yaw = 0f;
-                    MinecraftClient.getInstance().player.pitch = 0f;
-                }
-            }),
-            new Action("原地自杀", () -> {
-                if (MinecraftClient.getInstance().player != null)
-                    MinecraftClient.getInstance().player.sendChatMessage("/kill");
-            }),
-            new Action("一秒关门(全关)", Cheats::allOff)
+            new Action("清屏聊天", Cheats::clearChat),
+            new Action("视角归零", Cheats::resetLook),
+            new Action("原地自杀", Cheats::suicide),
+            new Action("一键全关", Cheats::allOff),
+            new Action("换白天", () -> sendCmd("/time set day")),
+            new Action("换黑夜", () -> sendCmd("/time set midnight")),
+            new Action("天气放晴", () -> sendCmd("/weather clear")),
+            new Action("大声认罪", () -> say("我是挂狗 报警吧"))
     };
 
     private static final Random RAND = new Random();
     private static final String[] SPAM_LINES = {
-            "喵～", "我是一只猫娘~", "主人让我刷屏qwq", "114514", "这个服好卡喵",
-            "我开挂了 你报警吧", "(=^･ω･^=)"
+            "喵～", "我是一只猫娘~", "114514", "这个服好卡喵",
+            "我开挂了 你报警吧", "(=^･ω･^=)", "1919810"
     };
 
     private static int spamTimer = 0;
@@ -78,39 +71,38 @@ public class Cheats {
     public static void tick(MinecraftClient mc) {
         if (mc.player == null) return;
 
-        // 飞行
+        PlayerAbilities ab = mc.player.abilities;
+
         if (FLY.on) {
-            PlayerAbilities a = mc.player.getAbilities();
-            a.allowFlying = true;
-            a.flying = true;
-            a.setFlySpeed(0.5f);
+            ab.allowFlying = true;
+            ab.flying = true;
+            ab.setFlySpeed(0.5f);
             mc.player.sendAbilitiesUpdate();
             flyApplied = true;
         } else if (flyApplied) {
-            PlayerAbilities a = mc.player.getAbilities();
-            a.allowFlying = false;
-            a.flying = false;
-            a.setFlySpeed(0.05f);
+            ab.allowFlying = false;
+            ab.flying = false;
+            ab.setFlySpeed(0.05f);
             mc.player.sendAbilitiesUpdate();
             flyApplied = false;
         }
 
-        // 加速
         if (SPEED.on) {
-            mc.player.getAbilities().setWalkSpeed(0.6f);
+            ab.setWalkSpeed(0.4f);
+            mc.player.sendAbilitiesUpdate();
             speedApplied = true;
         } else if (speedApplied) {
-            mc.player.getAbilities().setWalkSpeed(0.1f);
+            ab.setWalkSpeed(0.1f);
+            mc.player.sendAbilitiesUpdate();
             speedApplied = false;
         }
 
-        // 无摔落
-        if (NO_FALL.on && mc.player.fallDistance > 2.0f && mc.player.networkHandler != null) {
-            mc.player.networkHandler.sendPacket(new PlayerMoveC2SPacket.OnGroundOnly(true));
+        if (NO_FALL.on && mc.player.fallDistance > 1.5f && mc.getNetworkHandler() != null) {
+            mc.getNetworkHandler().sendPacket(new PlayerMoveC2SPacket.PositionOnly(
+                    mc.player.getX(), mc.player.getY(), mc.player.getZ(), true));
             mc.player.fallDistance = 0f;
         }
 
-        // 夜视
         if (FULL_BRIGHT.on) {
             if (!gammaSaved) { savedGamma = mc.options.gamma; gammaSaved = true; }
             mc.options.gamma = 10.0;
@@ -119,7 +111,6 @@ public class Cheats {
             gammaSaved = false;
         }
 
-        // 穿墙
         if (NO_CLIP.on) {
             mc.player.noClip = true;
             noclipApplied = true;
@@ -128,45 +119,38 @@ public class Cheats {
             noclipApplied = false;
         }
 
-        // 蜘蛛爬墙
         if (SPIDER.on && mc.player.horizontalCollision) {
             Vec3d v = mc.player.getVelocity();
             mc.player.setVelocity(v.x, 0.25, v.z);
         }
 
-        // 自动连跳
         if (BUNNY_HOP.on && mc.player.isOnGround()) {
             Vec3d v = mc.player.getVelocity();
             mc.player.setVelocity(v.x, 0.42, v.z);
         }
 
-        // 自动复活
         if (AUTO_RESPAWN.on && !mc.player.isAlive()) {
             mc.player.requestRespawn();
         }
 
-        // 转圈
         if (SPIN.on) {
             mc.player.yaw += 20f;
         }
 
-        // 抽搐瞄准
         if (JITTER.on) {
             mc.player.yaw += (RAND.nextFloat() - 0.5f) * 15f;
             mc.player.pitch += (RAND.nextFloat() - 0.5f) * 15f;
         }
 
-        // 倒立视角
         if (FLIP_PITCH.on) {
             mc.player.pitch = -mc.player.pitch;
         }
 
-        // 喵喵刷屏
         if (CHAT_SPAM.on) {
             spamTimer++;
-            if (spamTimer >= 40 && mc.player.networkHandler != null) {
+            if (spamTimer >= 40 && mc.getNetworkHandler() != null) {
                 spamTimer = 0;
-                mc.player.networkHandler.sendPacket(new ChatMessageC2SPacket(
+                mc.getNetworkHandler().sendPacket(new ChatMessageC2SPacket(
                         SPAM_LINES[RAND.nextInt(SPAM_LINES.length)]));
             }
         } else {
@@ -184,9 +168,37 @@ public class Cheats {
     public static void sendCoords() {
         MinecraftClient mc = MinecraftClient.getInstance();
         if (mc.player == null) return;
-        String s = String.format("我在 X=%.1f Y=%.1f Z=%.1f",
+        String s = String.format("\u00a7b坐标 \u00a7fX=%.1f Y=%.1f Z=%.1f",
                 mc.player.getX(), mc.player.getY(), mc.player.getZ());
         mc.player.sendMessage(new LiteralText(s), false);
+    }
+
+    public static void clearChat() {
+        MinecraftClient mc = MinecraftClient.getInstance();
+        if (mc.inGameHud != null) mc.inGameHud.getChatHud().clear(true);
+    }
+
+    public static void resetLook() {
+        MinecraftClient mc = MinecraftClient.getInstance();
+        if (mc.player == null) return;
+        mc.player.yaw = 0f;
+        mc.player.pitch = 0f;
+    }
+
+    public static void suicide() {
+        sendCmd("/kill");
+    }
+
+    private static void sendCmd(String cmd) {
+        MinecraftClient mc = MinecraftClient.getInstance();
+        if (mc.getNetworkHandler() == null) return;
+        mc.getNetworkHandler().sendPacket(new ChatMessageC2SPacket(cmd));
+    }
+
+    private static void say(String msg) {
+        MinecraftClient mc = MinecraftClient.getInstance();
+        if (mc.player == null) return;
+        mc.player.sendChatMessage(msg);
     }
 
     public static void allOff() {
