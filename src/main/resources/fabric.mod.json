@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "ghostmenu",
-  "version": "1.0.0",
+  "version": "${version}",
   "name": "Ghost Menu",
   "description": "Client cheat menu for 1.16.5",
   "authors": ["ghost"],
