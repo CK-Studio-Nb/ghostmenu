@@ -2,26 +2,32 @@ package com.ghost.cheatmenu.helper;
 
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.network.packet.c2s.play.ChatMessageC2SPacket;
+import net.minecraft.util.math.Vec3d;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 结构生成器 v2 —— 布局按 zh.minecraft.wiki 两篇攻略修正
- *
- * 刷铁机（wiki:Tutorial:刷铁机）：
- *  - 生成面禁止玻璃/冰/树叶等 → 全石头平台
- *  - 床数 ≥ 村民数，村民需 20 分钟内睡过觉 → 灵魂沙气泡柱间歇恐吓
- *  - 僵尸塞矿车限制移动
- *  - 处死用溺水（熔岩会烧掉铁锭，岩浆块下漏斗收不到固体下的掉落物）
- *
- * 刷怪塔（wiki:Tutorial:刷怪塔）：
- *  - 塔体悬空，挂机点远离地面/洞穴（防生物生成在塔外占上限）
- *  - 生成平台大而矮（单层 2 格高）
- *  - 处死用岩浆块（不烧掉落物）+ 水流集中，不用摔落井
- *  - 漏斗直接贴箱子收集
+ * 结构生成器 v3
+ *  - 中心点：玩家视线前方 8 格（玩家不会站在建筑里）
+ *  - 布局按 zh.minecraft.wiki 两篇攻略修正
+ *  - 快照/撤销见 StructureUndo
  */
 public class StructureBuilder {
+
+    /** 以"玩家视线前方 8 格"为中心（水平投影），返回 {cx, cy, cz} */
+    private static int[] center(MinecraftClient mc) {
+        Vec3d eye = mc.player.getEyePos();
+        Vec3d dir = mc.player.getRotationVec(1.0f);
+        Vec3d h = new Vec3d(dir.x, 0, dir.z);
+        if (h.lengthSquared() < 1.0E-4) h = new Vec3d(0, 0, -1);
+        h = h.normalize().multiply(8);
+        return new int[]{
+                (int) Math.floor(eye.x + h.x),
+                (int) Math.floor(mc.player.getY()),
+                (int) Math.floor(eye.z + h.z)
+        };
+    }
 
     private static final List<String> QUEUE = new ArrayList<>();
     private static final int PER_TICK = 4;
@@ -99,9 +105,8 @@ public class StructureBuilder {
      */
     public static void ironFarm(MinecraftClient mc) {
         if (mc.player == null) return;
-        int bx = (int) Math.floor(mc.player.getX());
-        int by = (int) Math.floor(mc.player.getY());
-        int bz = (int) Math.floor(mc.player.getZ());
+        int[] c = center(mc);
+        int bx = c[0], by = c[1], bz = c[2];
 
         begin("刷铁机v2");
 
@@ -226,9 +231,8 @@ public class StructureBuilder {
      */
     public static void mobTower(MinecraftClient mc) {
         if (mc.player == null) return;
-        int bx = (int) Math.floor(mc.player.getX());
-        int by = (int) Math.floor(mc.player.getY());
-        int bz = (int) Math.floor(mc.player.getZ());
+        int[] c = center(mc);
+        int bx = c[0], by = c[1], bz = c[2];
 
         begin("刷怪塔v2");
 
@@ -296,25 +300,42 @@ public class StructureBuilder {
 
     public static void cobbleGen(MinecraftClient mc) {
         if (mc.player == null) return;
-        int bx = (int) Math.floor(mc.player.getX());
-        int by = (int) Math.floor(mc.player.getY());
-        int bz = (int) Math.floor(mc.player.getZ());
+        int[] c = center(mc);
+        int bx = c[0], by = c[1], bz = c[2];
 
-        begin("刷石机");
+        begin("刷石机v2");
 
-        // ---- 0. 自动快照（撤销用）----
-        StructureUndo.snapshot(mc, bx - 2, by - 2, bz - 1, bx + 2, by + 1, bz + 1);
+        // ---- 0. 自动快照 ----
+        StructureUndo.snapshot(mc, bx - 3, by - 2, bz - 3, bx + 3, by + 2, bz + 3);
 
-        fill(bx - 2, by - 1, bz - 1, bx + 2, by - 1, bz + 1, "minecraft:stone");
-        set(bx - 1, by, bz - 1, "minecraft:water");
-        set(bx + 1, by, bz - 1, "minecraft:lava");
-        set(bx, by, bz - 1, "minecraft:cobblestone");
-        set(bx, by, bz, "minecraft:piston[facing=north]");
-        set(bx, by, bz + 1, "minecraft:hopper[facing=down]");
-        set(bx, by - 1, bz + 1, "minecraft:chest");
+        // ---- 1. 地基 ----
+        fill(bx - 2, by - 1, bz - 2, bx + 2, by - 1, bz + 2, "minecraft:stone");
+
+        // ---- 2. 刷石槽（东西向 3 格长）----
+        // bx-1 水槽 / bx 石头生成位 / bx+1 熔岩槽
+        set(bx - 1, by, bz, "minecraft:water");
+        set(bx + 1, by, bz, "minecraft:lava");
+        // 生成位留空（水熔岩相遇自动长石头）
+
+        // ---- 3. 活塞（面向西推石头）+ 红石动力 ----
+        set(bx, by, bz - 1, "minecraft:piston[facing=south]");     // 活塞在北，面向南推
+        set(bx, by, bz - 2, "minecraft:redstone_block");           // 红石块常供电（活塞常伸）
+        // 间断性工作：活塞旁边放拉杆（手动拉=循环），改用红石块+中继器脉冲更自动，
+        // 但最稳的是玩家手动拉杆，这里给拉杆：
+        set(bx + 1, by, bz - 2, "minecraft:lever[face=floor,facing=east,powered=false]");
+
+        // ---- 4. 收集：石头被推到南侧掉落 → 漏斗 + 箱子 ----
+        set(bx, by - 1, bz + 1, "minecraft:hopper[facing=down]");
+        set(bx, by - 2, bz + 1, "minecraft:chest");
+        set(bx, by, bz + 1, "minecraft:air");   // 掉落通道
+
+        // ---- 5. 侧墙挡水挡熔岩 ----
+        set(bx - 1, by, bz - 1, "minecraft:stone");
+        set(bx + 1, by, bz - 1, "minecraft:stone");
 
         mc.player.sendMessage(new net.minecraft.text.LiteralText(
-                "\u00a7e[GhostMenu] 刷石机指令入队完毕。站在活塞后手动激活即可循环刷圆石。"), false);
+                "\u00a7e[GhostMenu] 刷石机v2 完成。用法：拉一下拉杆 → 活塞推掉长出的石头 → 圆石落进漏斗箱子。"
+                        + "持续刷：反复拉杆。"), false);
     }
 
     // =========================================================
@@ -323,9 +344,8 @@ public class StructureBuilder {
 
     public static void cabin(MinecraftClient mc) {
         if (mc.player == null) return;
-        int bx = (int) Math.floor(mc.player.getX());
-        int by = (int) Math.floor(mc.player.getY());
-        int bz = (int) Math.floor(mc.player.getZ());
+        int[] c = center(mc);
+        int bx = c[0], by = c[1], bz = c[2];
 
         begin("小木屋");
 
