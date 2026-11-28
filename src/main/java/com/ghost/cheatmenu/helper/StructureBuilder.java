@@ -244,7 +244,15 @@ public class StructureBuilder {
         set(bx, by, bz, "minecraft:hopper[facing=down]");
 
         // ---- 3. 处死层：岩浆块 3x3 地板（对生物持续伤害，不烧掉落物）----
+        // 岩浆块每秒扣 1 血，怪会残血但不立刻死 → 玩家可补刀收经验
         fill(bx - 1, by + 1, bz - 1, bx + 1, by + 1, bz + 1, "minecraft:magma_block");
+
+        // ---- 3.5 修脚位：南墙开 1x2 洞（玩家站在洞里补刀收经验）----
+        // 玩家双脚在处死室内踩岩浆块外侧的石头台阶上，身体在墙外
+        // 怪打不到玩家身体，玩家挥剑够得着怪 → 安全收经验
+        fill(bx, by + 1, bz + 2, bx, by + 2, bz + 2, "minecraft:air");   // 南墙开洞
+        set(bx, by + 1, bz + 3, "minecraft:stone");                       // 玩家站立台阶（墙外）
+        fill(bx, by + 2, bz + 3, bx, by + 3, bz + 3, "minecraft:air");    // 玩家头部空间
 
         // ---- 4. 处死室围墙（石头，1 格高 + 顶留空让怪掉进来）----
         fill(bx - 2, by + 2, bz - 2, bx + 2, by + 3, bz + 2, "minecraft:stone");
