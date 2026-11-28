@@ -189,29 +189,32 @@ public class StructureBuilder {
                         + "干井 21 格摔剩 2 血 + 岩浆块烧死；塔外插满火把不刷怪。"), false);
     }
 
-    // =====================================================================
-    //  刷铁机 v8 —— 八核水运式（1:1 复刻业主教程，Java 版等价适配）
-    //
-    //  平面：以玩家锚点为中心 41×41。同心三层：
-    //    max 9..18   刷怪带（地板 cy-2，干燥，火把防杂怪）
-    //    max 3..8    水道（地板 cy-3，四向含水楼梯供水，水流向中心）
-    //    max ≤2      5×5 竖井：空腔 cy-2..cy-13，岩浆池 cy-14，漏斗底 cy-15
-    //  井沿 max=3 一圈下半砖：挡水（水不进井）+ 傀儡可直接越过掉井
-    //  四向刷怪带中央各一个 3×3 僵尸坑：灵魂沙+水+半砖盖（僵尸永久存活）
-    //  八座村民塔（每边左右各一）：柱高 4 + 3×3 台 + 3 床 + 玻璃圈开 2 格 + 半砖封顶
-    //  机制：村民白天隔玻璃看见僵尸→夜里睡觉→恐慌→召唤铁傀儡→
-    //        傀儡游荡踏上含水楼梯→被水推过水道→越过井沿掉井→岩浆烧死→漏斗收铁进箱
-    //  Java 适配：含水方块替代倒水（同效果）、僵尸 PersistenceRequired 防消失、
-    //            村民直接 summon 入塔（省引路楼梯）、地下漏斗链+检修井通箱子
+// =====================================================================
+    //  刷铁机 v9 —— 八核水运式（修复版）
+    //  v8 三大问题 → 修复：
+    //   1. 村民塔在围墙外草地 → 傀儡刷在农场外，永远进不了水道
+    //      → 塔移入刷怪带内（边距14），紧贴僵尸坑（外向开窗），傀儡刷在台面即被水推
+    //   2. 平台四角无光照 → 夜间杂怪刷在台面上
+    //      → 四角各插 36 支火把
+    //   3. 围墙无门 → 玩家进不去
+    //      → 四边正中各开 1 格栅栏门（怪不开门）
+    //  另：生成前先清场（半径50村民/傀儡/僵尸）并拆除 v8 遗留的外围塔
     // =====================================================================
     public static void ironFarm(MinecraftClient mc) {
         if (mc.player == null) return;
         int[] c = center(mc);
         int cx = c[0], cy = c[1], cz = c[2];
 
-        begin("刷铁机v8-八核");
-        StructureUndo.snapshot(mc, cx - 21, cy - 16, cz - 21, cx + 21, cy + 8, cz + 21);
+        begin("刷铁机v9-八核");
+        StructureUndo.snapshot(mc, cx - 22, cy - 16, cz - 22, cx + 22, cy + 9, cz + 22);
         String SLAB = "minecraft:smooth_stone_slab[type=bottom]";
+        String VNBT = "{PersistenceRequired:1b,Silent:1b,VillagerData:{profession:\"minecraft:farmer\",level:2,type:\"minecraft:plains\"}}";
+        String ZNBT = "{PersistenceRequired:1b,Silent:1b}";
+
+        // ---------- 0. 清场：清掉旧版残留（含 v8 外围塔上的村民） ----------
+        add("/kill @e[type=minecraft:villager,distance=..50]");
+        add("/kill @e[type=minecraft:iron_golem,distance=..50]");
+        add("/kill @e[type=minecraft:zombie,distance=..50]");
 
         // ---------- 1. 地基与台面 ----------
         fill(cx - 20, cy - 16, cz - 20, cx + 20, cy - 3, cz + 20, "minecraft:stone");
@@ -219,7 +222,7 @@ public class StructureBuilder {
         fill(cx - 20, cy - 1, cz - 20, cx + 20, cy - 1, cz + 20, "minecraft:air");
         fill(cx - 20, cy, cz - 20, cx + 20, cy + 9, cz + 20, "minecraft:air");
 
-        // ---------- 2. 水道层挖空（max 3..8 → 站立层 cy-2） ----------
+        // ---------- 2. 水道层挖空（外圈 max 3..8 → 站立层 cy-2） ----------
         fill(cx - 8, cy - 2, cz + 3, cx + 8, cy - 2, cz + 8, "minecraft:air");
         fill(cx - 8, cy - 2, cz - 8, cx + 8, cy - 2, cz - 3, "minecraft:air");
         fill(cx + 3, cy - 2, cz - 2, cx + 8, cy - 2, cz + 2, "minecraft:air");
@@ -237,7 +240,7 @@ public class StructureBuilder {
             for (int x = -1; x <= 1; x++)
                 set(cx + x, cy - 15, cz + z, "minecraft:chest");
 
-        // ---------- 4. 井沿下半砖（max=3，挡水放傀儡） ----------
+        // ---------- 4. 井沿下半砖（挡水放傀儡） ----------
         for (int i = -3; i <= 3; i++) {
             set(cx + i, cy - 3, cz - 3, SLAB);
             set(cx + i, cy - 3, cz + 3, SLAB);
@@ -247,7 +250,7 @@ public class StructureBuilder {
             }
         }
 
-        // ---------- 5. 四向含水楼梯（max=8，背朝中心，水向井流） ----------
+        // ---------- 5. 四向含水楼梯（水向井流） ----------
         for (int i = -8; i <= 8; i++) {
             set(cx + i, cy - 2, cz + 8, "minecraft:stone_brick_stairs[facing=south,half=bottom,waterlogged=true]");
             set(cx + i, cy - 2, cz - 8, "minecraft:stone_brick_stairs[facing=north,half=bottom,waterlogged=true]");
@@ -257,8 +260,7 @@ public class StructureBuilder {
             }
         }
 
-        // ---------- 6. 四向僵尸坑 + 外墙栅栏 + 刷怪带火把 ----------
-        String ZNBT = "{PersistenceRequired:1b,Silent:1b}";
+        // ---------- 6. 四向僵尸坑 + 外墙栅栏门 + 全台火把 ----------
         int[][] dirs = {{0, 1}, {0, -1}, {1, 0}, {-1, 0}};
         for (int[] d : dirs) {
             int dx = d[0], dz = d[1];
@@ -283,7 +285,6 @@ public class StructureBuilder {
                 set(cx + xm, cy, cz - 1, SLAB); set(cx + xm, cy, cz + 1, SLAB);
                 summon("minecraft:zombie", cx + xm, cy - 4, cz, ZNBT);
             }
-            // 刷怪带火把（防夜间杂怪，铁傀儡生成不受光照影响）
             for (int t = -8; t <= 8; t += 4) {
                 if (dx == 0) {
                     set(cx + t, cy - 1, cz + 10 * dz, "minecraft:torch");
@@ -294,7 +295,7 @@ public class StructureBuilder {
                 }
             }
         }
-        // 外沿石墙（cy-1）+ 栅栏（cy）
+        // 外沿石墙 + 栅栏 + 四边正中栅栏门（怪打不开，主人一点就开）
         fill(cx - 19, cy - 1, cz - 19, cx + 19, cy - 1, cz - 19, "minecraft:stone");
         fill(cx - 19, cy - 1, cz + 19, cx + 19, cy - 1, cz + 19, "minecraft:stone");
         fill(cx - 19, cy - 1, cz - 18, cx - 19, cy - 1, cz + 18, "minecraft:stone");
@@ -303,61 +304,74 @@ public class StructureBuilder {
         fill(cx - 19, cy, cz + 19, cx + 19, cy, cz + 19, "minecraft:oak_fence");
         fill(cx - 19, cy, cz - 18, cx - 19, cy, cz + 18, "minecraft:oak_fence");
         fill(cx + 19, cy, cz - 18, cx + 19, cy, cz + 18, "minecraft:oak_fence");
+        set(cx, cy, cz - 19, "minecraft:oak_fence_gate[facing=south,open=false]");
+        set(cx, cy, cz + 19, "minecraft:oak_fence_gate[facing=south,open=false]");
+        set(cx - 19, cy, cz, "minecraft:oak_fence_gate[facing=east,open=false]");
+        set(cx + 19, cy, cz, "minecraft:oak_fence_gate[facing=east,open=false]");
+        // 四角平台火把（防夜间杂怪）
+        int[] cs = {-18, -14, -10, 10, 14, 18};
+        for (int gx : cs)
+            for (int gz : cs)
+                set(cx + gx, cy - 1, cz + gz, "minecraft:torch");
 
-        // ---------- 7. 八座村民塔（每边左右各一） ----------
+        // ---------- 7. 八座村民塔（在刷怪带内，紧贴僵尸坑） ----------
         for (int[] d : dirs) {
             int dx = d[0], dz = d[1];
-            String face; // 床头朝向（朝农场中心 / 僵尸坑）
-            if (dx == 0) face = (dz > 0) ? "north" : "south"; else face = (dx > 0) ? "west" : "east";
             for (int s = -1; s <= 1; s += 2) {
-                int tx, tz;
-                if (dx == 0) { tx = cx + 4 * s; tz = cz + 20 * dz; }
-                else { tx = cx + 20 * dx; tz = cz + 4 * s; }
-                set(tx, cy - 1, tz, "minecraft:stone");                    // 基座
-                fill(tx, cy, tz, tx, cy + 3, tz, "minecraft:stone");       // 柱（4 高）
-                fill(tx - 1, cy + 4, tz - 1, tx + 1, cy + 4, tz + 1, "minecraft:stone"); // 3×3 台
-                // 3 张床（头朝僵尸）
-                for (int b = -1; b <= 1; b++) {
+                int tx = (dx == 0) ? cx + 4 * s : cx + 14 * dx;
+                int tz = (dx == 0) ? cz + 14 * dz : cz + 4 * s;
+                String f = (dx > 0) ? "east" : (dx < 0) ? "west" : (dz > 0) ? "south" : "north";
+                fill(tx, cy - 2, tz, tx, cy + 1, tz, "minecraft:stone");                  // 柱
+                fill(tx - 1, cy + 2, tz - 1, tx + 1, cy + 2, tz + 1, "minecraft:stone");  // 3×3 台
+                for (int b = -1; b <= 1; b++) {                                            // 3 床，头朝坑
                     if (dx == 0) {
-                        set(tx + b, cy + 5, tz, "minecraft:red_bed[facing=" + face + ",part=foot]");
-                        set(tx + b, cy + 5, tz - dz, "minecraft:red_bed[facing=" + face + ",part=head]");
+                        set(tx + b, cy + 3, tz, "minecraft:red_bed[facing=" + f + ",part=foot]");
+                        set(tx + b, cy + 3, tz + dz, "minecraft:red_bed[facing=" + f + ",part=head]");
                     } else {
-                        set(tx, cy + 5, tz + b, "minecraft:red_bed[facing=" + face + ",part=foot]");
-                        set(tx - dx, cy + 5, tz + b, "minecraft:red_bed[facing=" + face + ",part=head]");
+                        set(tx, cy + 3, tz + b, "minecraft:red_bed[facing=" + f + ",part=foot]");
+                        set(tx + dx, cy + 3, tz + b, "minecraft:red_bed[facing=" + f + ",part=head]");
                     }
                 }
-                // 玻璃圈（朝僵尸面开 2 格，白天看得见僵尸）
-                if (dx == 0) {
-                    set(tx - s, cy + 6, tz - dz, "minecraft:glass");
-                    set(tx - 1, cy + 6, tz, "minecraft:glass");
-                    set(tx + 1, cy + 6, tz, "minecraft:glass");
-                    fill(tx - 1, cy + 6, tz + dz, tx + 1, cy + 6, tz + dz, "minecraft:glass");
-                } else {
-                    set(tx - dx, cy + 6, tz - s, "minecraft:glass");
-                    set(tx, cy + 6, tz - 1, "minecraft:glass");
-                    set(tx, cy + 6, tz + 1, "minecraft:glass");
-                    fill(tx + dx, cy + 6, tz - 1, tx + dx, cy + 6, tz + 1, "minecraft:glass");
+                for (int b = -1; b <= 1; b++) {                                            // 侧向面玻璃
+                    if (dx == 0) {
+                        set(tx - 1, cy + 4, tz + b, "minecraft:glass");
+                        set(tx + 1, cy + 4, tz + b, "minecraft:glass");
+                    } else {
+                        set(tx + b, cy + 4, tz - 1, "minecraft:glass");
+                        set(tx + b, cy + 4, tz + 1, "minecraft:glass");
+                    }
                 }
-                fill(tx - 1, cy + 7, tz - 1, tx + 1, cy + 7, tz + 1, "minecraft:oak_slab[type=bottom]"); // 半砖封顶
-                String VNBT = "{PersistenceRequired:1b,Silent:1b,VillagerData:{profession:\"minecraft:farmer\",level:2,type:\"minecraft:plains\"}}";
-                for (int b = -1; b <= 1; b++) {
-                    if (dx == 0) summon("minecraft:villager", tx + b, cy + 5, tz, VNBT);
-                    else summon("minecraft:villager", tx, cy + 5, tz + b, VNBT);
+                if (dx == 0) {                                                             // 内向全玻璃，外向留1格
+                    fill(tx - 1, cy + 4, tz - dz, tx + 1, cy + 4, tz - dz, "minecraft:glass");
+                    set(tx - 1, cy + 4, tz + dz, "minecraft:glass");
+                } else {
+                    fill(tx - dx, cy + 4, tz - 1, tx - dx, cy + 4, tz + 1, "minecraft:glass");
+                    set(tx + dx, cy + 4, tz - 1, "minecraft:glass");
+                }
+                fill(tx - 1, cy + 5, tz - 1, tx + 1, cy + 5, tz + 1, "minecraft:oak_slab[type=bottom]");
+                for (int b = -1; b <= 1; b++) {                                            // 3 村民
+                    if (dx == 0) summon("minecraft:villager", tx + b, cy + 3, tz, VNBT);
+                    else summon("minecraft:villager", tx, cy + 3, tz + b, VNBT);
                 }
             }
         }
 
-        // ---------- 8. 检修井：半砖封口，挖开后顺梯子下到箱子取铁 ----------
+        // ---------- 8. 拆 v8 遗留的外围塔（|20| 草地上八座） ----------
+        int[][] olds = {{4, 20}, {-4, 20}, {4, -20}, {-4, -20}, {20, 4}, {-20, 4}, {20, -4}, {-20, -4}};
+        for (int[] o : olds)
+            fill(cx + o[0] - 1, cy - 1, cz + o[1] - 1, cx + o[0] + 1, cy + 8, cz + o[1] + 1, "minecraft:air");
+
+        // ---------- 9. 检修井：半砖封口，挖开下梯子取铁 ----------
         fill(cx + 2, cy - 1, cz + 10, cx + 2, cy - 15, cz + 10, "minecraft:air");
         fill(cx + 2, cy - 2, cz + 10, cx + 2, cy - 14, cz + 10, "minecraft:ladder[facing=south]");
         set(cx + 2, cy - 1, cz + 10, SLAB);
         fill(cx + 1, cy - 15, cz + 6, cx + 2, cy - 14, cz + 9, "minecraft:air");
 
         mc.player.sendMessage(new net.minecraft.text.LiteralText(
-                "\u00a7e[GhostMenu] 刷铁机v8-八核：四向水道+8村民塔+4僵尸坑+岩浆井。"
-                        + "天黑村民睡觉后开始出铁；挖开检修井半砖（南侧内圈平台）下梯子取铁。"), false);
+                "\u00a7e[GhostMenu] 刷铁机v9-八核修复：村民塔移入台内贴僵尸坑、四角插满火把、"
+                        + "四边正中栅栏门进出、已清场并拆除外围旧塔。天黑村民睡觉后出铁；"
+                        + "取铁：南侧内圈半砖挖开下梯子（箱子在井底旁地下）。"), false);
     }
-
     // =====================================================================
     //  刷石机 v5
     // =====================================================================
