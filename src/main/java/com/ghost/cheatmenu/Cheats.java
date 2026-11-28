@@ -47,6 +47,7 @@ public class Cheats {
 
     // ===== 透视/ESP =====
     public static final Toggle XRAY = new Toggle("真透视X-Ray");
+    public static final Toggle XRAY_OUTLINE = new Toggle("透视辅助轮廓");
     public static final Toggle ESP_PLAYER = new Toggle("透视-玩家");
     public static final Toggle ESP_MOB = new Toggle("透视-怪物");
     public static final Toggle LASER = new Toggle("激光射线(视觉)");
@@ -67,7 +68,7 @@ public class Cheats {
 
     public static final Toggle[] TOGGLES = {
             SPEED, FLY, NO_FALL, NO_CLIP, SPIDER, BUNNY_HOP, AUTO_RESPAWN, FULL_BRIGHT,
-            ESP_PLAYER, ESP_MOB, LASER, LASER_ATTACK, XRAY, KILL_AURA, INFINITE_CHARGE,
+            ESP_PLAYER, ESP_MOB, LASER, LASER_ATTACK, XRAY, XRAY_OUTLINE, KILL_AURA, INFINITE_CHARGE,
             UNLOCK_RECIPES,
             SPIN, JITTER, CHAT_SPAM
     };
