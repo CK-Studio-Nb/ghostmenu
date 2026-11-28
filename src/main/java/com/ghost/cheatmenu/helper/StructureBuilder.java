@@ -105,6 +105,9 @@ public class StructureBuilder {
 
         begin("刷铁机v2");
 
+        // ---- 0. 自动快照（撤销用）----
+        StructureUndo.snapshot(mc, bx - 8, by - 22, bz - 8, bx + 10, by + 8, bz + 8);
+
         // ---- 1. 清空工作区 ----
         fill(bx - 8, by - 22, bz - 8, bx + 10, by + 8, bz + 8, "minecraft:air");
 
@@ -229,6 +232,9 @@ public class StructureBuilder {
 
         begin("刷怪塔v2");
 
+        // ---- 0. 自动快照（撤销用）----
+        StructureUndo.snapshot(mc, bx - 6, by, bz - 6, bx + 6, by + 28, bz + 6);
+
         int topY = by + 20;   // 生成层地板 y
 
         // ---- 1. 清空竖直区 ----
@@ -296,6 +302,9 @@ public class StructureBuilder {
 
         begin("刷石机");
 
+        // ---- 0. 自动快照（撤销用）----
+        StructureUndo.snapshot(mc, bx - 2, by - 2, bz - 1, bx + 2, by + 1, bz + 1);
+
         fill(bx - 2, by - 1, bz - 1, bx + 2, by - 1, bz + 1, "minecraft:stone");
         set(bx - 1, by, bz - 1, "minecraft:water");
         set(bx + 1, by, bz - 1, "minecraft:lava");
@@ -319,6 +328,9 @@ public class StructureBuilder {
         int bz = (int) Math.floor(mc.player.getZ());
 
         begin("小木屋");
+
+        // ---- 0. 自动快照（撤销用）----
+        StructureUndo.snapshot(mc, bx - 5, by - 1, bz - 5, bx + 5, by + 4, bz + 5);
 
         fill(bx - 4, by - 1, bz - 4, bx + 4, by - 1, bz + 4, "minecraft:oak_planks");
         fill(bx - 4, by, bz - 4, bx + 4, by + 3, bz + 4, "minecraft:air");
