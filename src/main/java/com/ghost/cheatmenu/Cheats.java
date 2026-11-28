@@ -137,6 +137,9 @@ public class Cheats {
 
         if (mc.player == null) return;
 
+        // X-Ray 轮廓缓存重建
+        com.ghost.cheatmenu.helper.XrayOutline.tick(mc);
+
         // 检测 player 实例变化（死亡重生 / 换维度）→ 清空已应用状态
         if (lastPlayerRef != mc.player) {
             lastPlayerRef = mc.player;
@@ -249,6 +252,16 @@ public class Cheats {
     public static void renderWorld(WorldRenderContext ctx) {
         MinecraftClient mc = MinecraftClient.getInstance();
         if (mc.player == null || mc.world == null) return;
+
+        // X-Ray 辅助线框（即使 ESP 全关也要能画）
+        if (XRAY.on) {
+            try {
+                com.ghost.cheatmenu.helper.XrayOutline.render(
+                        ctx.matrixStack(), ctx.consumers(), ctx.camera().getPos());
+            } catch (Throwable ignored) {
+            }
+        }
+
         if (!ESP_PLAYER.on && !ESP_MOB.on && !LASER.on) return;
 
         MatrixStack ms = ctx.matrixStack();
