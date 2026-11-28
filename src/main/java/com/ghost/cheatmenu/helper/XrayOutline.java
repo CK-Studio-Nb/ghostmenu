@@ -43,7 +43,7 @@ public class XrayOutline {
     private static final float[] COL_WALL = {0.35f, 0.72f, 1.00f, 0.30f};
 
     public static void tick(MinecraftClient mc) {
-        if (!Cheats.XRAY.on || mc.player == null || mc.world == null) {
+        if (!Cheats.XRAY.on || !Cheats.XRAY_OUTLINE.on || mc.player == null || mc.world == null) {
             built = false;
             EDGES.clear();
             return;
@@ -106,7 +106,23 @@ public class XrayOutline {
                     if (airy(st)) continue;
 
                     Block b = st.getBlock();
-                    if (isKept(b)) continue;   // 矿石等保留原样渲染，不画线
+                    if (isKept(b)) continue;   // 矿石等保留原样，不画线
+
+                    // ---- 边界淡出：距离越远越透明，到半径处消失 ----
+                    // 这样不会出现"网格突然截断"的硬边界
+                    float d = (float) Math.sqrt((double) (dx * dx + dz * dz));
+                    float fade;
+                    if (d <= R - 3f) {
+                        fade = 1f;
+                    } else if (d >= R) {
+                        fade = 0f;
+                    } else {
+                        fade = (R - d) / 3f;
+                    }
+                    if (fade <= 0.04f) continue;   // 边缘几乎不可见，干脆不画
+
+                    float[] cWalk = {COL_WALK[0], COL_WALK[1], COL_WALK[2], COL_WALK[3] * fade};
+                    float[] cWall = {COL_WALL[0], COL_WALL[1], COL_WALL[2], COL_WALL[3] * fade};
 
                     double x0 = ox + dx;
                     double y0 = oy + dy;
@@ -114,27 +130,27 @@ public class XrayOutline {
 
                     // 顶面（+Y）
                     if (airy(at(dx, dy + 1, dz))) {
-                        quadY(x0, y0 + 1, z0, COL_WALK);
+                        quadY(x0, y0 + 1, z0, cWalk);
                     }
                     // 底面（-Y）
                     if (airy(at(dx, dy - 1, dz))) {
-                        quadY(x0, y0, z0, COL_WALL);
+                        quadY(x0, y0, z0, cWall);
                     }
                     // 北面（-Z）
                     if (airy(at(dx, dy, dz - 1))) {
-                        quadZ(x0, y0, z0, COL_WALL);
+                        quadZ(x0, y0, z0, cWall);
                     }
                     // 南面（+Z）
                     if (airy(at(dx, dy, dz + 1))) {
-                        quadZ(x0, y0, z0 + 1, COL_WALL);
+                        quadZ(x0, y0, z0 + 1, cWall);
                     }
                     // 西面（-X）
                     if (airy(at(dx - 1, dy, dz))) {
-                        quadX(x0, y0, z0, COL_WALL);
+                        quadX(x0, y0, z0, cWall);
                     }
                     // 东面（+X）
                     if (airy(at(dx + 1, dy, dz))) {
-                        quadX(x0 + 1, y0, z0, COL_WALL);
+                        quadX(x0 + 1, y0, z0, cWall);
                     }
                 }
             }
@@ -214,7 +230,7 @@ public class XrayOutline {
     }
 
     public static void render(MatrixStack ms, VertexConsumerProvider consumers, Vec3d cam) {
-        if (!Cheats.XRAY.on || EDGES.isEmpty() || consumers == null || ms == null) return;
+        if (!Cheats.XRAY.on || !Cheats.XRAY_OUTLINE.on || EDGES.isEmpty() || consumers == null || ms == null) return;
 
         VertexConsumer vc = consumers.getBuffer(RenderLayer.getLines());
         ms.push();
