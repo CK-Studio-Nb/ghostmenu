@@ -17,6 +17,9 @@ import net.minecraft.text.LiteralText;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
 
+import com.ghost.cheatmenu.helper.StructureBuilder;
+import com.ghost.cheatmenu.helper.XrayOutline;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
@@ -78,6 +81,10 @@ public class Cheats {
             new Action("刷 10 只僵尸", () -> spawnMobs("zombie", 10)),
             new Action("刷 5 只苦力怕", () -> spawnMobs("creeper", 5)),
             new Action("刷 3 只末影人", () -> spawnMobs("enderman", 3)),
+            new Action("生成 刷铁机(僵尸恐吓+熔岩+漏斗)", () -> StructureBuilder.ironFarm(mc())),
+            new Action("生成 刷怪塔(24格摔落+漏斗)", () -> StructureBuilder.mobTower(mc())),
+            new Action("生成 刷石机(水+熔岩+活塞)", () -> StructureBuilder.cobbleGen(mc())),
+            new Action("生成 小木屋(床+工作台+熔炉+箱)", () -> StructureBuilder.cabin(mc())),
             new Action("刷 10 个钻石块", () -> giveItem("diamond_block", 10)),
             new Action("刷 64 个金苹果", () -> giveItem("golden_apple", 64)),
             new Action("刷 64 个 TNT", () -> giveItem("tnt", 64)),
@@ -140,6 +147,9 @@ public class Cheats {
 
         // X-Ray 轮廓缓存重建
         com.ghost.cheatmenu.helper.XrayOutline.tick(mc);
+
+        // 结构生成队列：每 tick 发几条指令，避免被服务端踢
+        StructureBuilder.tick(mc);
 
         // 检测 player 实例变化（死亡重生 / 换维度）→ 清空已应用状态
         if (lastPlayerRef != mc.player) {
@@ -462,6 +472,11 @@ public class Cheats {
         MinecraftClient mc = MinecraftClient.getInstance();
         if (mc.getNetworkHandler() == null) return;
         mc.getNetworkHandler().sendPacket(new ChatMessageC2SPacket(cmd));
+    }
+
+    /** 给 Action lambda 用的快捷取客户端 */
+    private static MinecraftClient mc() {
+        return MinecraftClient.getInstance();
     }
 
     public static void allOff() {
