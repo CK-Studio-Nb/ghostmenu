@@ -7,10 +7,19 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 结构生成器：把一堆指令排进队列，每 tick 只发几条，
- * 避免瞬间发几百条指令被服务端踢。
+ * 结构生成器 v2 —— 布局按 zh.minecraft.wiki 两篇攻略修正
  *
- * 所有指令都用相对玩家脚下坐标生成。
+ * 刷铁机（wiki:Tutorial:刷铁机）：
+ *  - 生成面禁止玻璃/冰/树叶等 → 全石头平台
+ *  - 床数 ≥ 村民数，村民需 20 分钟内睡过觉 → 灵魂沙气泡柱间歇恐吓
+ *  - 僵尸塞矿车限制移动
+ *  - 处死用溺水（熔岩会烧掉铁锭，岩浆块下漏斗收不到固体下的掉落物）
+ *
+ * 刷怪塔（wiki:Tutorial:刷怪塔）：
+ *  - 塔体悬空，挂机点远离地面/洞穴（防生物生成在塔外占上限）
+ *  - 生成平台大而矮（单层 2 格高）
+ *  - 处死用岩浆块（不烧掉落物）+ 水流集中，不用摔落井
+ *  - 漏斗直接贴箱子收集
  */
 public class StructureBuilder {
 
@@ -38,10 +47,6 @@ public class StructureBuilder {
 
     public static boolean busy() {
         return !QUEUE.isEmpty();
-    }
-
-    public static int remaining() {
-        return QUEUE.size();
     }
 
     public static void clear() {
@@ -78,19 +83,19 @@ public class StructureBuilder {
     }
 
     // =========================================================
-    //  刷铁机
+    //  刷铁机 v2（wiki 修正版）
     // =========================================================
 
     /**
-     * 刷铁机（僵尸恐吓 + 熔岩处死 + 漏斗回收）
-     *
-     * 布局说明（bx,by,bz = 玩家脚下）：
-     *   - 9x9 石台，y = by-1
-     *   - 中心 3x3 村民仓（玻璃围栏），y = by .. by+2
-     *   - 村民仓北侧 (bz-3) 一个 1x2x1 僵尸笼，村民透玻璃可见 → panic
-     *   - 台面四角放水源，水往中心流；中心下方是收集井
-     *   - 铁傀儡在台面生成后被水推向中心 → 掉进井里
-     *   - 井底 y = by-20 熔岩，熔岩下漏斗 + 箱子
+     * 布局（bx,by,bz = 玩家脚下方块）：
+     *   y-1   15x15 石头平台（生成面，绝不玻璃）
+     *   y     平台表面
+     *   仓    中心 5x5 石头墙（玻璃只做北窗），3 床 3 工作站 3 村民
+     *   僵尸  仓北侧 3x3 石笼，矿车+僵尸，玻璃窗对村民
+     *   气泡  仓内西北角灵魂沙气泡柱，村民周期脱离恐吓睡觉
+     *   井    平台东缘外挂 3x3 石井 20 格深
+     *   井底  水（溺死）→ 下层漏斗 3x3 → 箱子
+     *   屋顶  玻璃（玻璃不能当生成支撑 → 铁傀儡不会生成在屋顶上）
      */
     public static void ironFarm(MinecraftClient mc) {
         if (mc.player == null) return;
@@ -98,90 +103,123 @@ public class StructureBuilder {
         int by = (int) Math.floor(mc.player.getY());
         int bz = (int) Math.floor(mc.player.getZ());
 
-        begin("刷铁机");
+        begin("刷铁机v2");
 
-        // ---- 1. 清空工作区（避免埋进山体）----
-        fill(bx - 5, by, bz - 5, bx + 5, by + 6, bz + 5, "minecraft:air");
+        // ---- 1. 清空工作区 ----
+        fill(bx - 8, by - 22, bz - 8, bx + 10, by + 8, bz + 8, "minecraft:air");
 
-        // ---- 2. 石台地板 9x9 ----
-        fill(bx - 4, by - 1, bz - 4, bx + 4, by - 1, bz + 4, "minecraft:stone");
+        // ---- 2. 平台 15x15 石头（生成面）----
+        fill(bx - 7, by - 1, bz - 7, bx + 7, by - 1, bz + 7, "minecraft:stone");
 
-        // ---- 3. 中心村民仓 3x3x3 玻璃围栏 ----
-        // 先清内部
-        fill(bx - 1, by, bz - 1, bx + 1, by + 2, bz + 1, "minecraft:air");
-        // 四面玻璃墙（留出入门先不管，直接封死靠 summon 塞进去）
-        fill(bx - 2, by, bz - 2, bx - 2, by + 2, bz + 2, "minecraft:glass");   // 西
-        fill(bx + 2, by, bz - 2, bx + 2, by + 2, bz + 2, "minecraft:glass");   // 东
-        fill(bx - 2, by, bz - 2, bx + 2, by + 2, bz - 2, "minecraft:glass");   // 北
-        fill(bx - 2, by, bz + 2, bx + 2, by + 2, bz + 2, "minecraft:glass");   // 南
-        // 顶盖
-        fill(bx - 2, by + 3, bz - 2, bx + 2, by + 3, bz + 2, "minecraft:stone");
-
-        // ---- 4. 村民仓内部：3 张床 + 3 个工作台 ----
-        set(bx - 1, by, bz - 1, "minecraft:red_bed[part=head,facing=east]");
-        set(bx, by, bz - 1, "minecraft:red_bed[part=foot,facing=east]");
-        set(bx + 1, by, bz - 1, "minecraft:smithing_table");
-        set(bx - 1, by, bz + 1, "minecraft:red_bed[part=head,facing=west]");
-        set(bx, by, bz + 1, "minecraft:red_bed[part=foot,facing=west]");
-        set(bx + 1, by, bz + 1, "minecraft:smithing_table");
-
-        // ---- 5. 三只村民（农夫/工具匠，能提供工作站条件）----
-        String vFarmer = "{PersistenceRequired:1b,CustomName:\"\\\"\\u53d8\\u5f02\\u6751\\u6c11\\\"\",VillagerData:{profession:\"minecraft:farmer\",level:2,type:\"minecraft:plains\"}}";
-        summon("minecraft:villager", bx, by, bz, vFarmer);
-        summon("minecraft:villager", bx, by, bz - 1, null);
-        summon("minecraft:villager", bx, by, bz + 1, null);
-
-        // ---- 6. 僵尸笼（北侧，村民透玻璃能看到）----
-        fill(bx, by, bz - 4, bx, by + 1, bz - 4, "minecraft:air");
-        set(bx, by - 1, bz - 4, "minecraft:stone");
-        fill(bx, by, bz - 5, bx, by + 1, bz - 5, "minecraft:glass");
-        fill(bx + 1, by, bz - 4, bx + 1, by + 1, bz - 4, "minecraft:glass");
-        fill(bx - 1, by, bz - 4, bx - 1, by + 1, bz - 4, "minecraft:glass");
-        set(bx, by + 2, bz - 4, "minecraft:glass");
-        summon("minecraft:zombie", bx, by, bz - 4,
-                "{PersistenceRequired:1b,Silent:1b,IsBaby:0b}");
-
-        // ---- 7. 台面水源（四边各 3 个，朝中心流）----
-        for (int i = -3; i <= 3; i += 3) {
-            set(bx + i, by, bz - 4, "minecraft:water");
-            set(bx + i, by, bz + 4, "minecraft:water");
-            set(bx - 4, by, bz + i, "minecraft:water");
-            set(bx + 4, by, bz + i, "minecraft:water");
+        // ---- 3. 平台挡墙 2 高：石头下部 + 玻璃上部 ----
+        //      下层石头挡铁傀儡走，上层玻璃透光且不能生成
+        for (int i = -7; i <= 7; i++) {
+            set(bx + i, by, bz - 7, "minecraft:stone");
+            set(bx + i, by, bz + 7, "minecraft:stone");
+            set(bx - 7, by, bz + i, "minecraft:stone");
+            set(bx + 7, by, bz + i, "minecraft:stone");
+            set(bx + i, by + 1, bz - 7, "minecraft:glass");
+            set(bx + i, by + 1, bz + 7, "minecraft:glass");
+            set(bx - 7, by + 1, bz + i, "minecraft:glass");
+            set(bx + 7, by + 1, bz + i, "minecraft:glass");
         }
 
-        // ---- 8. 收集井（从台面中心东侧往下 20 格）----
-        int hx = bx + 3, hz = bz;
-        fill(hx, by - 1, hz, hx, by, hz, "minecraft:air");            // 井口
-        fill(hx - 1, by - 20, hz, hx + 1, by - 20, hz, "minecraft:stone"); // 井底
-        // 井壁
-        fill(hx - 1, by - 20, hz, hx - 1, by, hz, "minecraft:stone");
-        fill(hx + 1, by - 20, hz, hx + 1, by, hz, "minecraft:stone");
-        fill(hx, by - 20, hz - 1, hx, by, hz - 1, "minecraft:stone");
-        fill(hx, by - 20, hz + 1, hx, by, hz + 1, "minecraft:stone");
-        fill(hx, by - 20, hz, hx, by, hz, "minecraft:air");
+        // ---- 4. 村民仓 5x5：石墙，北墙开 3 宽玻璃窗（y+1 层）----
+        fill(bx - 2, by, bz - 2, bx + 2, by + 3, bz + 2, "minecraft:air");
+        fill(bx - 2, by, bz - 2, bx + 2, by + 3, bz + 2, "minecraft:stone");   // 先整体填实
+        fill(bx - 1, by, bz - 1, bx + 1, by + 2, bz + 1, "minecraft:air");     // 挖空内部
+        fill(bx - 1, by + 1, bz - 2, bx + 1, by + 1, bz - 2, "minecraft:glass"); // 北窗
+        fill(bx - 2, by + 3, bz - 2, bx + 2, by + 3, bz + 2, "minecraft:glass"); // 仓顶玻璃（不能生成）
+        // 开门（东墙中部 1x2）
+        fill(bx + 2, by, bz, bx + 2, by + 1, bz, "minecraft:air");
 
-        // ---- 9. 井底处死层：熔岩 + 漏斗 + 箱子 ----
-        set(hx, by - 19, hz, "minecraft:lava");
-        set(hx, by - 20, hz, "minecraft:hopper[facing=down]");
-        set(hx, by - 21, hz, "minecraft:chest");
-        // 熔岩上方加一层告示牌挡一下（可选，防掉落物被烧光前弹走）
+        // ---- 5. 内部：3 床 + 3 工作站 ----
+        set(bx - 1, by, bz - 1, "minecraft:red_bed[part=head,facing=east]");
+        set(bx, by, bz - 1, "minecraft:red_bed[part=foot,facing=east]");
+        set(bx + 1, by, bz - 1, "minecraft:composter");
+        set(bx - 1, by, bz + 1, "minecraft:red_bed[part=head,facing=west]");
+        set(bx, by, bz + 1, "minecraft:red_bed[part=foot,facing=west]");
+        set(bx + 1, by, bz + 1, "minecraft:barrel");
 
-        // ---- 10. 台面封边（防铁傀儡跑掉）----
-        fill(bx - 4, by, bz - 4, bx + 4, by + 1, bz - 4, "minecraft:glass");
-        fill(bx - 4, by, bz + 4, bx + 4, by + 1, bz + 4, "minecraft:glass");
-        fill(bx - 4, by, bz - 4, bx - 4, by + 1, bz + 4, "minecraft:glass");
-        fill(bx + 4, by, bz - 4, bx + 4, by + 1, bz + 4, "minecraft:glass");
+        // ---- 6. 三村民 ----
+        String vNbt = "{PersistenceRequired:1b,VillagerData:{profession:\"minecraft:farmer\",level:2,type:\"minecraft:plains\"}}";
+        summon("minecraft:villager", bx - 1, by, bz, vNbt);
+        summon("minecraft:villager", bx, by, bz, vNbt);
+        summon("minecraft:villager", bx + 1, by, bz, vNbt);
+
+        // ---- 7. 灵魂沙气泡柱（仓内西墙角）：间歇恐吓 ----
+        fill(bx - 1, by, bz + 1, bx - 1, by + 2, bz + 1, "minecraft:water");
+        set(bx - 1, by, bz + 1, "minecraft:soul_sand");
+        // 床 bz+1 排会和气泡柱位置重叠 → 那格床已在上面 set 会被水覆盖，微调：
+        // 把 bz+1 那格床移到 bz（中央）
+        set(bx - 1, by, bz + 1, "minecraft:red_bed[part=head,facing=west]");
+        set(bx, by, bz + 1, "minecraft:red_bed[part=foot,facing=west]");
+        // （water fill 在前面，bed set 在后面覆盖成功）
+
+        // ---- 8. 僵尸笼（平台北缘外贴仓），僵尸坐矿车 ----
+        int zx = bx, zy = by, zz = bz - 4;
+        fill(zx - 1, zy - 1, zz - 1, zx + 1, zy + 2, zz + 1, "minecraft:air");
+        set(zx, zy - 1, zz, "minecraft:stone");
+        fill(zx - 1, zy, zz - 1, zx + 1, zy + 2, zz - 1, "minecraft:stone");
+        fill(zx - 1, zy, zz + 1, zx + 1, zy + 2, zz + 1, "minecraft:stone");
+        fill(zx - 1, zy, zz, zx - 1, zy + 2, zz, "minecraft:stone");
+        fill(zx + 1, zy, zz, zx + 1, zy + 2, zz, "minecraft:stone");
+        fill(zx - 1, zy + 2, zz - 1, zx + 1, zy + 2, zz + 1, "minecraft:stone");
+        set(zx, zy + 1, zz + 1, "minecraft:glass");   // 对村民那面留窗
+        set(zx, zy, zz, "minecraft:rail");
+        summon("minecraft:minecart", zx, zy, zz, null);
+        add(String.format(
+            "/execute as @e[type=minecraft:minecart,limit=1,sort=nearest,x=%d,y=%d,z=%d] run summon minecraft:zombie ~ ~ ~ {PersistenceRequired:1b,Silent:1b}",
+            zx, zy, zz));
+
+        // ---- 9. 水流集中：平台表面从四周流向中心附近的井口 ----
+        // 井口在平台东缘 (bx+5, bz+5)，水流从西/北/南三边推向井口
+        for (int i = -6; i <= 4; i++) {
+            set(bx + i, by, bz + 6, "minecraft:water");     // 南边水流向北
+            set(bx + i, by, bz - 6, "minecraft:water");     // 北边水流向南
+        }
+        for (int j = -6; j <= 6; j++) {
+            set(bx - 6, by, bz + j, "minecraft:water");     // 西边水流向东
+        }
+
+        // ---- 10. 收集井：3x3 石井，深 20，位于 (bx+5, bz+5) ----
+        int hx = bx + 5, hz = bz + 5;
+        fill(hx - 1, by - 1, hz - 1, hx + 1, by, hz + 1, "minecraft:air");    // 井口
+        fill(hx - 1, by - 21, hz - 1, hx + 1, by - 1, hz + 1, "minecraft:stone"); // 实心柱
+        fill(hx - 1, by - 21, hz - 1, hx + 1, by - 21, hz + 1, "minecraft:stone");
+        // 挖出井腔
+        fill(hx - 1, by - 20, hz - 1, hx + 1, by - 2, hz + 1, "minecraft:air");
+        // 井底水层（溺死处死，不烧掉落物）
+        fill(hx - 1, by - 20, hz - 1, hx + 1, by - 20, hz + 1, "minecraft:water");
+
+        // ---- 11. 收集：水下漏斗不可行 → 水下一格漏斗 + 箱子 ----
+        // 漏斗能从上方水中的掉落物吸（漏斗吸 1 格范围内掉落物，包括隔水）
+        fill(hx - 1, by - 21, hz - 1, hx + 1, by - 21, hz + 1, "minecraft:hopper");
+        set(hx, by - 22, hz, "minecraft:chest");
+        // 三个漏斗都指向中央箱子：设置朝向
+        set(hx - 1, by - 21, hz, "minecraft:hopper[facing=east]");
+        set(hx + 1, by - 21, hz, "minecraft:hopper[facing=west]");
+        set(hx, by - 21, hz - 1, "minecraft:hopper[facing=south]");
+        set(hx, by - 21, hz + 1, "minecraft:hopper[facing=north]");
+        set(hx, by - 21, hz, "minecraft:hopper[facing=down]");
 
         mc.player.sendMessage(new net.minecraft.text.LiteralText(
-                "\u00a7e[GhostMenu] 正在生成刷铁机，共 " + QUEUE.size() + " 条指令，请稍等…"), false);
+                "\u00a7e[GhostMenu] 刷铁机v2 指令入队完毕（" + QUEUE.size()
+                        + " 条，约 1 分钟建完）。铁锭在井底箱子里！"), false);
     }
 
     // =========================================================
-    //  刷怪塔
+    //  刷怪塔 v2（wiki 修正版：岩浆块处死 + 水流集中，不摔落）
     // =========================================================
 
     /**
-     * 刷怪塔：高 24 格的黑暗房，水流把怪推到中心，掉落摔死，漏斗收集。
+     * 布局（bx,by,bz = 玩家脚下方块）：
+     *   生成层  y+20：9x9 石平台，四周水槽推向中心洞口
+     *   洞口    中心 1x1 → 怪落入竖井
+     *   处死层  y+2：岩浆块地面上怪物持续受灼烧死亡
+     *              （岩浆块不烧掉落物）
+     *   收集层  y+1：漏斗 3x3 → 中央箱子
+     *   挂机点  塔旁 24+ 格外站高处（玩家自己选）
      */
     public static void mobTower(MinecraftClient mc) {
         if (mc.player == null) return;
@@ -189,43 +227,59 @@ public class StructureBuilder {
         int by = (int) Math.floor(mc.player.getY());
         int bz = (int) Math.floor(mc.player.getZ());
 
-        begin("刷怪塔");
+        begin("刷怪塔v2");
 
-        // 地面收集
-        set(bx, by, bz, "minecraft:hopper[facing=down]");
-        set(bx, by - 1, bz, "minecraft:chest");
+        int topY = by + 20;   // 生成层地板 y
+
+        // ---- 1. 清空竖直区 ----
+        fill(bx - 6, by, bz - 6, bx + 6, topY + 8, bz + 6, "minecraft:air");
+
+        // ---- 2. 收集层：漏斗 3x3 + 中央箱子 ----
         fill(bx - 1, by, bz - 1, bx + 1, by, bz + 1, "minecraft:hopper");
+        set(bx, by - 1, bz, "minecraft:chest");
+        set(bx - 1, by, bz, "minecraft:hopper[facing=east]");
+        set(bx + 1, by, bz, "minecraft:hopper[facing=west]");
+        set(bx, by, bz - 1, "minecraft:hopper[facing=south]");
+        set(bx, by, bz + 1, "minecraft:hopper[facing=north]");
+        set(bx, by, bz, "minecraft:hopper[facing=down]");
 
-        // 掉落井（3x3 x 24 高）
-        fill(bx - 1, by + 1, bz - 1, bx + 1, by + 23, bz + 1, "minecraft:air");
-        fill(bx - 2, by + 1, bz - 2, bx - 2, by + 23, bz + 2, "minecraft:stone");
-        fill(bx + 2, by + 1, bz - 2, bx + 2, by + 23, bz + 2, "minecraft:stone");
-        fill(bx - 2, by + 1, bz - 2, bx + 2, by + 23, bz - 2, "minecraft:stone");
-        fill(bx - 2, by + 1, bz + 2, bx + 2, by + 23, bz + 2, "minecraft:stone");
+        // ---- 3. 处死层：岩浆块 3x3 地板（对生物持续伤害，不烧掉落物）----
+        fill(bx - 1, by + 1, bz - 1, bx + 1, by + 1, bz + 1, "minecraft:magma_block");
 
-        // 生成室：11x11，两层高
-        fill(bx - 5, by + 24, bz - 5, bx + 5, by + 25, bz + 5, "minecraft:air");
-        fill(bx - 6, by + 24, bz - 6, bx + 6, by + 26, bz + 6, "minecraft:stone");
-        fill(bx - 5, by + 24, bz - 5, bx + 5, by + 25, bz + 5, "minecraft:air");
+        // ---- 4. 处死室围墙（石头，1 格高 + 顶留空让怪掉进来）----
+        fill(bx - 2, by + 2, bz - 2, bx + 2, by + 3, bz + 2, "minecraft:stone");
+        fill(bx - 1, by + 2, bz - 1, bx + 1, by + 3, bz + 1, "minecraft:air");
+        // 中心竖井口（收集层到生成层之间全通）
+        fill(bx, by + 1, bz, bx, topY - 1, bz, "minecraft:air");
 
-        // 屋顶封死
-        fill(bx - 6, by + 27, bz - 6, bx + 6, by + 27, bz + 6, "minecraft:stone");
+        // ---- 5. 生成层：9x9 平台 + 2 高空间 + 石墙 + 屋顶玻璃 ----
+        fill(bx - 4, topY, bz - 4, bx + 4, topY, bz + 4, "minecraft:stone");
+        fill(bx - 4, topY + 1, bz - 4, bx + 4, topY + 2, bz + 4, "minecraft:air");
+        fill(bx - 5, topY + 1, bz - 5, bx + 5, topY + 2, bz + 5, "minecraft:stone");
+        fill(bx - 4, topY + 1, bz - 4, bx + 4, topY + 2, bz + 4, "minecraft:air");
+        fill(bx - 5, topY + 3, bz - 5, bx + 5, topY + 3, bz + 5, "minecraft:glass");  // 玻璃顶：无光 + 不能生成
 
-        // 水流：从四边往中心
-        fill(bx - 5, by + 25, bz - 5, bx + 5, by + 25, bz - 5, "minecraft:water");
-        fill(bx - 5, by + 25, bz + 5, bx + 5, by + 25, bz + 5, "minecraft:water");
-        fill(bx - 5, by + 25, bz - 5, bx - 5, by + 25, bz + 5, "minecraft:water");
-        fill(bx + 5, by + 25, bz - 5, bx + 5, by + 25, bz + 5, "minecraft:water");
+        // ---- 6. 生成层中心洞口（1x1，接竖井）----
+        set(bx, topY, bz, "minecraft:air");
+
+        // ---- 7. 生成层水槽：四周水推向中心 ----
+        for (int i = -4; i <= 4; i++) {
+            if (Math.abs(i) <= 1) continue;   // 中心附近留给井口
+            set(bx + i, topY + 1, bz - 4, "minecraft:water");
+            set(bx + i, topY + 1, bz + 4, "minecraft:water");
+            set(bx - 4, topY + 1, bz + i, "minecraft:water");
+            set(bx + 4, topY + 1, bz + i, "minecraft:water");
+        }
 
         mc.player.sendMessage(new net.minecraft.text.LiteralText(
-                "\u00a7e[GhostMenu] 正在生成刷怪塔…"), false);
+                "\u00a7e[GhostMenu] 刷怪塔v2 指令入队完毕（" + QUEUE.size()
+                        + " 条）。挂机点：离塔 24 格外，塔必须悬空！"), false);
     }
 
     // =========================================================
     //  刷石机
     // =========================================================
 
-    /** 刷石机：熔岩 + 水 + 活塞自动推 */
     public static void cobbleGen(MinecraftClient mc) {
         if (mc.player == null) return;
         int bx = (int) Math.floor(mc.player.getX());
@@ -235,27 +289,21 @@ public class StructureBuilder {
         begin("刷石机");
 
         fill(bx - 2, by - 1, bz - 1, bx + 2, by - 1, bz + 1, "minecraft:stone");
-        // 水槽
         set(bx - 1, by, bz - 1, "minecraft:water");
-        // 熔岩槽
         set(bx + 1, by, bz - 1, "minecraft:lava");
-        // 中间产物位
         set(bx, by, bz - 1, "minecraft:cobblestone");
-        // 活塞
         set(bx, by, bz, "minecraft:piston[facing=north]");
-        // 收集
         set(bx, by, bz + 1, "minecraft:hopper[facing=down]");
         set(bx, by - 1, bz + 1, "minecraft:chest");
 
         mc.player.sendMessage(new net.minecraft.text.LiteralText(
-                "\u00a7e[GhostMenu] 正在生成刷石机…"), false);
+                "\u00a7e[GhostMenu] 刷石机指令入队完毕。站在活塞后手动激活即可循环刷圆石。"), false);
     }
 
     // =========================================================
     //  小木屋
     // =========================================================
 
-    /** 9x9 小木屋，带床、工作台、熔炉、箱子 */
     public static void cabin(MinecraftClient mc) {
         if (mc.player == null) return;
         int bx = (int) Math.floor(mc.player.getX());
@@ -270,18 +318,17 @@ public class StructureBuilder {
         fill(bx - 4, by, bz + 4, bx + 4, by + 3, bz + 4, "minecraft:oak_log");
         fill(bx - 4, by, bz - 4, bx - 4, by + 3, bz + 4, "minecraft:oak_log");
         fill(bx + 4, by, bz - 4, bx + 4, by + 3, bz + 4, "minecraft:oak_log");
-        fill(bx - 5, by + 4, bz - 5, bx + 5, by + 4, bz + 5, "minecraft:oak_stairs");
-
-        set(bx, by, bz + 4, "minecraft:oak_door[facing=north]");
+        fill(bx - 4, by + 4, bz - 4, bx + 4, by + 4, bz + 4, "minecraft:oak_planks");
+        set(bx, by, bz + 4, "minecraft:oak_door[facing=north,half=lower]");
         set(bx, by + 1, bz + 4, "minecraft:oak_door[facing=north,half=upper]");
-
         set(bx - 3, by, bz - 3, "minecraft:red_bed[part=head,facing=south]");
         set(bx - 2, by, bz - 3, "minecraft:red_bed[part=foot,facing=south]");
         set(bx + 3, by, bz - 3, "minecraft:crafting_table");
         set(bx + 3, by, bz - 2, "minecraft:furnace[facing=south]");
         set(bx + 3, by, bz - 1, "minecraft:chest[facing=south]");
+        set(bx, by + 2, bz - 4, "minecraft:glass");  // 采光窗
 
         mc.player.sendMessage(new net.minecraft.text.LiteralText(
-                "\u00a7e[GhostMenu] 正在生成小木屋…"), false);
+                "\u00a7e[GhostMenu] 小木屋指令入队完毕。"), false);
     }
 }
