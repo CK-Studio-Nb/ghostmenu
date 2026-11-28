@@ -58,7 +58,6 @@ public class Cheats {
     public static final Toggle REACH = new Toggle("长手(攻击距离)");
 
     // ===== 合成/图鉴 =====
-    public static final Toggle FREE_CRAFT = new Toggle("免材料合成");
     public static final Toggle UNLOCK_RECIPES = new Toggle("解锁全部图鉴");
 
     // ===== 抽象/搞事 =====
@@ -69,7 +68,7 @@ public class Cheats {
     public static final Toggle[] TOGGLES = {
             SPEED, FLY, NO_FALL, NO_CLIP, SPIDER, BUNNY_HOP, AUTO_RESPAWN, FULL_BRIGHT,
             ESP_PLAYER, ESP_MOB, LASER, LASER_ATTACK, XRAY, KILL_AURA, INFINITE_CHARGE,
-            FREE_CRAFT, UNLOCK_RECIPES,
+            UNLOCK_RECIPES,
             SPIN, JITTER, CHAT_SPAM
     };
 
