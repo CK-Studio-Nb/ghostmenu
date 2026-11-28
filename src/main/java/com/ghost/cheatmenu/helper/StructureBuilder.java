@@ -18,15 +18,17 @@ public class StructureBuilder {
 
     /** 玩家视线前方 8 格的水平投影中心 */
     private static int[] center(MinecraftClient mc) {
-        Vec3d eye = mc.player.getEyePos();
+        double ex = mc.player.getX();
+        double ey = mc.player.getY() + mc.player.getStandingEyeHeight();
+        double ez = mc.player.getZ();
         Vec3d dir = mc.player.getRotationVec(1.0f);
         Vec3d h = new Vec3d(dir.x, 0, dir.z);
         if (h.lengthSquared() < 1.0E-4) h = new Vec3d(0, 0, -1);
         h = h.normalize().multiply(8);
         return new int[]{
-                (int) Math.floor(eye.x + h.x),
+                (int) Math.floor(ex + h.x),
                 (int) Math.floor(mc.player.getY()),
-                (int) Math.floor(eye.z + h.z)
+                (int) Math.floor(ez + h.z)
         };
     }
 
