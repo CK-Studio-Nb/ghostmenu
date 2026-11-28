@@ -69,14 +69,15 @@ public class StructureUndo {
                         continue;
                     }
                     if (st == null) continue;
-                    if (st.isAir()) continue;   // 空气不用记，fill air 就能还原
-                    // 拿到完整的方块 id（含状态属性），setblock 能精确还原
+                    // 空气也记录（v2 修复：撤销后建筑残留的根因就是没记空气）
                     String id;
                     try {
-                        id = "minecraft:" + net.minecraft.util.registry.Registry.BLOCK
-                                .getId(st.getBlock()).getPath() + st.toString().substring(st.toString().indexOf('['));
+                        String full = st.toString();
+                        int bracket = full.indexOf('[');
+                        String path = net.minecraft.util.registry.Registry.BLOCK
+                                .getId(st.getBlock()).getPath();
+                        id = "minecraft:" + path + (bracket >= 0 ? full.substring(bracket) : "");
                     } catch (Throwable t) {
-                        // 简化路径：只还原方块类型，不带状态
                         id = "minecraft:" + net.minecraft.util.registry.Registry.BLOCK
                                 .getId(st.getBlock()).getPath();
                     }
